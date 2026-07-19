@@ -1,0 +1,91 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+
+# Build files
+build/
+dist/
+*.egg-info/
+
+# Model checkpoints and weights
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Experiment tracking
+wandb/
+mlruns/
+
+# Local outputs
+outputs/
+results/
+checkpoints/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# DVC cache
+.dvc/cache/
+
+# Raw and processed datasets
+data/raw/*
+data/processed/*
+data/splits/*
+
+# Keep empty data folders in Git
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/splits/.gitkeep
+
+# Astronomy data files
+*.fits
+*.fit
+*.fts
+*.fits.gz
+*.csv.gz
+*.npy
+*.npz
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
