@@ -1,0 +1,24 @@
+light_curve_encoder:
+  d_model: 128
+  n_heads: 8
+  n_layers: 6
+  d_ff: 512
+  output_dim: 256
+
+image_encoder:
+  backbone: resnet50
+  image_size: 224
+  output_dim: 256
+
+spectral_encoder:
+  input_dim: 128
+  hidden_dims:
+    - 256
+    - 256
+    - 256
+  output_dim: 256
+
+fusion:
+  modality_dim: 256
+  cross_attention_heads: 8
+  output_dim: 256
