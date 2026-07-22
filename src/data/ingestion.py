@@ -1,29 +1,30 @@
 import lightkurve as lk
-# Import the custom math functions you just built
-from .preprocessing import sigma_clip, normalize_flux, pad_or_truncate
+from functools import lru_cache
+# Import the updated math functions
+from .preprocessing import clean_and_center_flux, resample_and_mask
 
+@lru_cache(maxsize=500)
 def load_light_curve(kic_id):
     """
-    Downloads raw data and passes it through the preprocessing pipeline.
-    Returns a pristine (1024,) numpy array.
+    Downloads raw data, processes it, and caches it in RAM to feed the GPU.
+    Returns the flux array and the validity mask.
     """
-    # 1. Fetch data
+    # 1. Fetch data from NASA
     search_result = lk.search_lightcurve(kic_id, author='Kepler', quarter=3)
     if len(search_result) == 0:
         raise ValueError(f"No data found for {kic_id}")
         
     lc = search_result.download()
     
-    # Optional: We still use lightkurve's fill_gaps() here because it 
-    # relies on time-stamps which are lost once we convert to pure Numpy.
+    # Fill physical time gaps while it is still a LightCurve object
     lc = lc.fill_gaps()
     
-    # 2. Extract raw array
+    # 2. Extract raw time AND flux arrays (Time is required for resampling now)
+    raw_time = lc.time.value
     raw_flux = lc.flux.value
     
-    # 3. Route through your preprocessing pipeline
-    clean_flux = sigma_clip(raw_flux, sigma=5)
-    normalized_flux = normalize_flux(clean_flux)
-    final_array = pad_or_truncate(normalized_flux, target_len=1024)
+    # 3. Route through the new preprocessing pipeline
+    centered_flux = clean_and_center_flux(raw_flux)
+    final_flux, final_mask = resample_and_mask(raw_time, centered_flux, target_len=1024)
     
-    return final_array
+    return final_flux, final_mask
