@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-def validate_embedding(output):
+def validate_embedding(output:torch.Tensor,model_name:str="Unknown")->None:
     assert isinstance(output, torch.Tensor),"Output should be a Tensor Object"
     assert output.ndim == 2, "Output should have 2 dimensions"
     assert output.shape[1]==256,"The shape should haave 256 columns"
@@ -14,5 +14,3 @@ def validate_embedding(output):
     if torch.isposinf(output).any():
         raise ValueError("Positive Infinite values are present")
     print("Output format is correct")
-    return True
-        
