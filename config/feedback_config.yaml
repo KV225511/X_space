@@ -1,0 +1,17 @@
+# AstroFoundation — Human-in-the-Loop Active Learning & Feedback Configuration
+feedback:
+  enabled: true
+  storage_path: "data/feedback/expert_reviews.json"
+  auto_retrain_threshold: 50 # Trigger retraining cycle after 50 expert-validated targets
+
+acquisition:
+  default_strategy: "hybrid" # Options: entropy, margin, least_confidence, epistemic, energy_anomaly, hybrid
+  hybrid_epistemic_weight: 0.5
+  hybrid_energy_weight: 0.5
+  batch_size: 20
+  random_seed: 42
+
+prioritization:
+  high_epistemic_threshold: 0.05
+  ood_energy_threshold: -1.50
+  alert_on_novel_anomaly: true
