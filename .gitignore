@@ -89,3 +89,5 @@ data/splits/*
 *.db
 *.sqlite
 *.sqlite3
+# Scratch scripts
+scratch/
