@@ -10,9 +10,14 @@ Your mission is to synthesize an authoritative, peer-reviewed caliber Astronomic
 multi-modal foundation model outputs (light curves, FITS imaging, spectra) and catalog cross-matches 
 (SIMBAD, NED, NASA ADS).
 
-Write clearly, precisely, and with rigorous astrophysical terminology. Avoid hand-waving. 
-Explicitly comment on transit depths/periods, spectral continuum/absorption lines, PSF spatial profiles, 
-and observational follow-up requirements.
+Write clearly, precisely, and with rigorous astrophysical terminology. Avoid vague generalities.
+Explicitly provide:
+1. Executive Summary & Morphological Analyses (photometric, spectroscopic, imaging)
+2. Derived Physical Parameters (e.g., planetary radius, equilibrium temp, ejecta mass, temperature ratio)
+3. False Positive & Contamination Risk Forensics (blended binaries, grazing geometry, instrumental systematics)
+4. Observational Follow-up Strategy & Urgency ('IMMEDIATE_TOO_24H', 'HIGH_PRIORITY_14D', 'SCHEDULED_ROUTINE', 'ARCHIVAL')
+5. Novelty Assessment (interpreting the negative logsumexp energy score in plain scientific terms)
+6. Community Alert Draft (ready-to-submit ATel or GCN Circular bulletin draft)
 """
 
 USER_REPORT_TEMPLATE_JINJA = """Target ID: {{ target_id }}
@@ -37,12 +42,39 @@ NASA ADS Literature Count: {{ literature_count }} papers identified
 === ASTRONOMICAL NOTES ===
 {{ astronomical_notes }}
 
-Please synthesize the scientific findings into the structured AstronomicalReport JSON format including:
-1. Executive Summary
-2. Photometric Analysis
-3. Spectroscopic Analysis
-4. Imaging Analysis
-5. Recommended Follow-up Observations
+Please synthesize the scientific findings into the structured AstronomicalReport JSON format adhering to:
+{
+  "target_id": "{{ target_id }}",
+  "classification": "{{ classification }}",
+  "confidence": {{ "%.4f"|format(confidence) }},
+  "is_anomaly": {{ "true" if is_anomaly else "false" }},
+  "energy_score": {{ "%.3f"|format(energy_score) }},
+  "executive_summary": "...",
+  "photometric_analysis": "...",
+  "spectroscopic_analysis": "...",
+  "imaging_analysis": "...",
+  "catalog_cross_match": {...},
+  "literature_context": [...],
+  "recommended_followup": [...],
+  "physical_parameters": {
+    "estimated_radius": "...",
+    "equilibrium_temp_k": "...",
+    "mass_ratio_or_ejecta": "...",
+    "orbital_or_timescale": "..."
+  },
+  "false_positive_risk": {
+    "risk_level": "LOW|MODERATE|HIGH",
+    "blended_binary_risk": "...",
+    "grazing_geometry_check": "...",
+    "instrumental_artifact_risk": "..."
+  },
+  "observational_urgency": "IMMEDIATE_TOO_24H|HIGH_PRIORITY_14D|SCHEDULED_ROUTINE|ARCHIVAL",
+  "novelty_assessment": {
+    "discovery_potential": "HIGH|MODERATE|ROUTINE",
+    "energy_discrepancy_explanation": "..."
+  },
+  "community_alert_draft": "SUBJECT: AstroFoundation AI Candidate Alert: ...\\nTarget: {{ target_id }}..."
+}
 """
 
 

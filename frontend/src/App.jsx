@@ -705,6 +705,13 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                       <span>DeepSeek Scientific Analysis Report</span>
                     </div>
                     <div className="deepseek-badge-group">
+                      <span className={`urgency-pill urgency-${(result.scientific_report.observational_urgency || 'routine').toLowerCase()}`}>
+                        {result.scientific_report.observational_urgency === 'IMMEDIATE_TOO_24H'
+                          ? '🚨 ToO < 24h'
+                          : result.scientific_report.observational_urgency === 'HIGH_PRIORITY_14D'
+                          ? '⚡ Priority < 14d'
+                          : '📅 Routine'}
+                      </span>
                       <span className="deepseek-source-badge">
                         {result.scientific_report.metadata?.deepseek_source === 'live_deepseek'
                           ? '⚡ DeepSeek AI (Live)'
@@ -730,6 +737,43 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                     </div>
                   </div>
 
+                  {/* Derived Physical Parameters */}
+                  {result.scientific_report.physical_parameters && Object.keys(result.scientific_report.physical_parameters).length > 0 && (
+                    <div className="report-section">
+                      <h4 className="section-heading">Derived Astrophysical Physical Parameters</h4>
+                      <div className="phys-params-grid">
+                        {Object.entries(result.scientific_report.physical_parameters).map(([key, val]) => (
+                          <div key={key} className="phys-param-item">
+                            <span className="phys-key">{key.replace(/_/g, ' ')}</span>
+                            <span className="phys-val font-mono">{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* False Positive & Contamination Forensics */}
+                  {result.scientific_report.false_positive_risk && (
+                    <div className="report-section">
+                      <div className="section-heading-row">
+                        <h4 className="section-heading">False Positive &amp; Contamination Forensics</h4>
+                        <span className={`risk-level-badge risk-${(result.scientific_report.false_positive_risk.risk_level || 'low').toLowerCase()}`}>
+                          Risk: {result.scientific_report.false_positive_risk.risk_level || 'LOW'}
+                        </span>
+                      </div>
+                      <div className="fp-risk-grid">
+                        {Object.entries(result.scientific_report.false_positive_risk)
+                          .filter(([k]) => k !== 'risk_level')
+                          .map(([key, val]) => (
+                            <div key={key} className="fp-risk-item">
+                              <span className="stat-label">{key.replace(/_/g, ' ')}</span>
+                              <span className="fp-val">{String(val)}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
                   {result.scientific_report.recommended_followup?.length > 0 && (
                     <div className="report-section">
                       <h4 className="section-heading">Telescope Follow-up Recommendations</h4>
@@ -741,9 +785,28 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                     </div>
                   )}
 
+                  {/* Community Alert & Telegram Bulletin Draft */}
+                  {result.scientific_report.community_alert_draft && (
+                    <div className="report-section alert-draft-section">
+                      <div className="section-heading-row">
+                        <h4 className="section-heading">Astronomer's Telegram (ATel / GCN) Bulletin Draft</h4>
+                        <button
+                          className="copy-alert-btn"
+                          onClick={() => {
+                            navigator.clipboard.writeText(result.scientific_report.community_alert_draft);
+                            alert("Copied ATel / GCN Bulletin to clipboard!");
+                          }}
+                        >
+                          📋 Copy Bulletin
+                        </button>
+                      </div>
+                      <pre className="alert-pre font-mono">{result.scientific_report.community_alert_draft}</pre>
+                    </div>
+                  )}
+
                   <div className="report-footer-actions">
                     <button className="copy-report-btn" onClick={copyReport}>
-                      {copySuccess ? '✓ Copied to Clipboard!' : '📋 Copy Scientific Report'}
+                      {copySuccess ? '✓ Copied to Clipboard!' : '📋 Copy Full Scientific Report'}
                     </button>
                     <button className="export-report-btn" onClick={exportMarkdown}>
                       📥 Export Markdown

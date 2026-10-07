@@ -9,6 +9,8 @@ class AstronomicalReport(BaseModel):
     """
     Validated scientific report schema for multi-modal astronomical event analysis.
     Adheres to NASA ADS / peer-reviewed astrophysical reporting guidelines.
+    Includes astrophysical parameter derivations, contamination forensics,
+    observational urgency, and community alert drafts.
     """
     target_id: str = Field(description="Primary catalog designation (e.g. Kepler-10, KIC 9002278)")
     classification: str = Field(description="Predicted or consensus astronomical class")
@@ -37,6 +39,29 @@ class AstronomicalReport(BaseModel):
         default_factory=list,
         description="List of modalities used: ['light_curve', 'fits_image', 'spectrum']"
     )
+
+    # Enhanced Astrophysical Insights
+    physical_parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Derived physical parameters (e.g. estimated radius, equilibrium temperature, mass ratio, ejecta mass)",
+    )
+    false_positive_risk: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Contamination analysis (e.g. blended binary risk, grazing geometry, instrumental artifact likelihood)",
+    )
+    observational_urgency: str = Field(
+        default="SCHEDULED_ROUTINE",
+        description="Observational follow-up priority: IMMEDIATE_TOO_24H, HIGH_PRIORITY_14D, SCHEDULED_ROUTINE, or ARCHIVAL",
+    )
+    novelty_assessment: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Plain-English OOD energy discrepancy and discovery potential metric",
+    )
+    community_alert_draft: Optional[str] = Field(
+        default=None,
+        description="Formatted Astronomer's Telegram (ATel) or GCN Circular bulletin draft",
+    )
+
     generated_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="UTC timestamp of report generation"

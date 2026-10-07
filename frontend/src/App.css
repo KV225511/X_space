@@ -995,6 +995,153 @@
   border-color: var(--primary-indigo);
 }
 
+/* Observational Urgency Pills */
+.urgency-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+}
+
+.urgency-pill.urgency-immediate_too_24h {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  animation: pulseDot 1.5s infinite;
+}
+
+.urgency-pill.urgency-high_priority_14d {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.urgency-pill.urgency-scheduled_routine, .urgency-pill.urgency-routine {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+/* Derived Physical Parameters Grid */
+.phys-params-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.phys-param-item {
+  background: rgba(18, 24, 46, 0.55);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.phys-key {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.phys-val {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 0.2rem;
+}
+
+/* False Positive & Contamination Forensics */
+.section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.risk-level-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+}
+
+.risk-level-badge.risk-low, .risk-level-badge.risk-negligible {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.risk-level-badge.risk-moderate {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.risk-level-badge.risk-high {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.fp-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.6rem;
+}
+
+.fp-risk-item {
+  background: rgba(18, 24, 46, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.fp-val {
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  margin-top: 0.15rem;
+}
+
+/* Community Alert Bulletin Draft */
+.alert-draft-section {
+  background: rgba(6, 8, 18, 0.85);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+}
+
+.copy-alert-btn {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  background: rgba(99, 102, 241, 0.25);
+  color: var(--text-accent);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copy-alert-btn:hover {
+  background: var(--primary-indigo);
+  color: #ffffff;
+}
+
+.alert-pre {
+  background: transparent;
+  color: #a5f3fc;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-top: 0.4rem;
+}
+
 /* ------------------------------------------------------------------------------
    Explainable AI (XAI) Styles
    ------------------------------------------------------------------------------ */
