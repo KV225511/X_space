@@ -1,0 +1,33 @@
+# AstroFoundation — Autonomous Agent & LLM Reporter Configuration
+agent:
+  name: "AstroFoundationReActAgent"
+  version: "1.0.0"
+  max_iterations: 5
+  confidence_threshold_high: 0.85
+  confidence_threshold_low: 0.50
+  anomaly_energy_threshold: -1.50
+  timeout_seconds: 10.0
+
+catalogs:
+  simbad:
+    enabled: true
+    timeout: 8.0
+    max_retries: 2
+    row_limit: 5
+  ned:
+    enabled: true
+    timeout: 8.0
+    max_retries: 2
+    row_limit: 5
+  ads:
+    enabled: true
+    timeout: 8.0
+    max_retries: 2
+    row_limit: 5
+
+llm:
+  provider: "gemini" # Options: gemini, openai, heuristic_fallback
+  gemini_model: "gemini-1.5-flash"
+  openai_model: "gpt-4o"
+  temperature: 0.2
+  max_tokens: 1500
