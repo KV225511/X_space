@@ -6,10 +6,17 @@ import torchvision.models as models
 class FITSEncoder(nn.Module):
     """
     AstroFoundation v4.0 Multi-Band Vision Backbone.
-    Adapts a pretrained ResNet architecture to ingest 5-channel FITS astronomical
-    images (u, g, r, i, z bands) and outputs a contracted (BATCH, 256) L2 unit-norm vector.
+    Adapts a pretrained ResNet-34 architecture to ingest FITS astronomical
+    images and outputs a contracted (BATCH, 256) L2 unit-norm vector.
+
+    Args:
+        in_channels: Number of input channels.
+            - 3  (default): Single-band FITS stretched to 3 channels via ingestion.py
+            - 5  (upgrade):  Multi-band u,g,r,i,z once multi-band pipeline is wired
+        d_model: Output embedding dimension (must be 256 per system contract).
     """
-    def __init__(self, in_channels: int = 5, d_model: int = 256):
+    def __init__(self, in_channels: int = 3, d_model: int = 256):
+
         super().__init__()
         
         # 1. Load standard visual backbone (ResNet-34)

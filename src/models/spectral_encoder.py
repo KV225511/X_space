@@ -30,22 +30,33 @@ class SpectralEncoder(nn.Module):
     """
     AstroFoundation v4.0 1D Spectrographic Backbone.
     Ingests continuum-normalized rest-frame stellar spectra across a 4096 grid,
-    extracts localized atomic absorption lines via 1D convolutions, and outputs
-    a strictly contracted (BATCH, 256) float32 L2 unit-norm embedding vector.
+    extracts localized atomic absorption lines via 1D convolutions, preserves
+    spatial wavelength band locality (16 regional bands) via Adaptive Pooling,
+    and outputs a strictly contracted (BATCH, 256) float32 L2 unit-norm embedding.
     """
-    def __init__(self, in_channels: int = 1, d_model: int = 256):
+    def __init__(self, in_channels: int = 1, d_model: int = 256, num_spatial_bins: int = 16):
         super().__init__()
-        
+        self.num_spatial_bins = num_spatial_bins
+
         # 1. Hierarchical 1D Convolutional Stack (Downsamples 4096 grid -> 64 grid)
-        # We progressively double filter channels (32 -> 64 -> 128) while pooling the wavelength resolution
+        # Progressively doubles filter channels (32 -> 64 -> 128)
         self.conv_stack = nn.Sequential(
             SpectralBlock(in_channels, 32, kernel_size=15, pool_size=4),  # 4096 -> 1024 (Wide atomic bands)
             SpectralBlock(32, 64, kernel_size=7, pool_size=4),            # 1024 -> 256  (Medium absorption lines)
             SpectralBlock(64, 128, kernel_size=5, pool_size=4)            # 256  -> 64   (Fine spectroscopic fingerprint)
         )
-        
-        # 2. Final Projection Head for strict 256-dim output contract
-        self.output_proj = nn.Linear(128, d_model)
+
+        # 2. Spatial-Preserving Adaptive Pooling across 16 wavelength regions
+        # Preserves line wavelength positions (e.g. H-alpha vs O-III vs Ca H&K)
+        self.adaptive_pool = nn.AdaptiveAvgPool1d(num_spatial_bins)
+
+        # 3. Projection Head for strict 256-dim output contract
+        self.output_proj = nn.Sequential(
+            nn.Linear(128 * num_spatial_bins, 512),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(512, d_model)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -57,17 +68,17 @@ class SpectralEncoder(nn.Module):
         # Step A: Ensure input is 3D -> (BATCH, 1, 4096)
         if x.dim() == 2:
             x = x.unsqueeze(1)
-            
+
         # Step B: Extract hierarchical spectroscopic features -> (BATCH, 128, 64)
         features = self.conv_stack(x)
-        
-        # Step C: Global Average Pooling across the remaining 64 wavelength bins -> (BATCH, 128)
-        pooled = torch.mean(features, dim=-1)
-        
+
+        # Step C: Spatial-preserving pooling across 16 wavelength regions -> (BATCH, 128 * 16)
+        pooled = self.adaptive_pool(features).flatten(1)
+
         # Step D: Project to system dimension -> (BATCH, 256)
         proj = self.output_proj(pooled)
-        
+
         # Step E: Universal L2 Unit-Norm Contract (eps=1e-8 prevents zero-division NaN)
         normalized_embedding = F.normalize(proj, p=2, dim=-1, eps=1e-8)
-        
+
         return normalized_embedding
