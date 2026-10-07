@@ -76,6 +76,7 @@ export default function App() {
   const [selectedTargetId, setSelectedTargetId] = useState("Kepler-10");
   const [mode, setMode] = useState("dropdown"); // "dropdown" | "upload"
   const [uploadedImageBase64, setUploadedImageBase64] = useState(null);
+  const [includeFits, setIncludeFits] = useState(true);
   const [generateDeepSeek, setGenerateDeepSeek] = useState(true);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -251,7 +252,8 @@ export default function App() {
 
     const payload = {
       target_id: mode === "dropdown" ? selectedTargetId : "Uploaded_Target",
-      image_base64: mode === "upload" ? uploadedImageBase64 : null,
+      image_base64: mode === "upload" && includeFits ? uploadedImageBase64 : null,
+      include_fits: includeFits,
       generate_deepseek_report: generateDeepSeek,
       force_fresh_report: false,
     };
@@ -517,6 +519,31 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
           {/* DeepSeek Moderation Controls & Action */}
           <div className="action-footer">
             <div className="moderation-controls">
+              {/* Optional 2D FITS Calculation Toggle */}
+              <div className="modality-toggle-card">
+                <label className="toggle-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={includeFits}
+                    onChange={(e) => setIncludeFits(e.target.checked)}
+                  />
+                  <span className="custom-checkbox"></span>
+                  <div className="toggle-text-block">
+                    <div className="toggle-header-row">
+                      <span className="toggle-title">Include 2D FITS Vision Calculation (Optional)</span>
+                      <span className={`modality-status-pill ${includeFits ? 'active' : 'bypassed'}`}>
+                        {includeFits ? 'Vision Active' : 'Optional / Bypassed'}
+                      </span>
+                    </div>
+                    <span className="toggle-desc">
+                      {includeFits
+                        ? "2D FITS vision backbone active (arcsinh + MAD feature map). Uncheck if only light curve or spectra are available."
+                        : "FITS calculation bypassed: Model predicts purely from 1D Light Curves & Optical Spectra."}
+                    </span>
+                  </div>
+                </label>
+              </div>
+
               <label className="toggle-checkbox-label">
                 <input
                   type="checkbox"
@@ -583,6 +610,9 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                     <span className="hero-class-name">{result.classification.replace('_', ' ')}</span>
                     <span className={`hero-anomaly-tag ${result.is_anomaly ? 'anomaly' : 'in-distribution'}`}>
                       {result.is_anomaly ? '⚠️ Anomaly (OOD)' : '✅ In-Distribution'}
+                    </span>
+                    <span className={`hero-modality-tag ${result.fits_calculation_mode === 'ACTIVE' ? 'fits-active' : 'fits-bypassed'}`}>
+                      {result.fits_calculation_mode === 'ACTIVE' ? '🖼️ FITS 2D Active' : '⚡ FITS Optional (Bypassed)'}
                     </span>
                   </div>
                 </div>

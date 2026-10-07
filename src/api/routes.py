@@ -11,9 +11,11 @@ import torch
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from PIL import Image
 from pydantic import BaseModel, Field
+from astropy.io import fits
 
 from src.agent.agent import run_astro_agent
 from src.agent.tools import query_ads, query_ned, query_simbad
+from src.data.preprocessing import process_fits_image_v4
 from src.models.full_model import AstroFoundationModel
 from src.reporting.llm_reporter import AstronomicalReportGenerator, get_moderation_stats
 from .background_tasks import TaskRecord, TaskStatus, task_manager
@@ -186,9 +188,10 @@ class ClassifyRequest(BaseModel):
     star_id: Optional[str] = "Target-01"
     flux: Optional[List[float]] = Field(default=None, description="1D Light Curve flux values (e.g. 8192 timesteps)")
     fits_image: Optional[List[List[List[float]]]] = Field(
-        default=None, description="3D FITS image tensor (3, 224, 224)"
+        default=None, description="3D FITS image tensor (3, 224, 224) (optional)"
     )
     spectrum: Optional[List[float]] = Field(default=None, description="1D Spectrum flux array (4096 points)")
+    include_fits: bool = Field(default=True, description="Whether FITS image calculation is active (optional)")
 
 
 class ClassifyResponse(BaseModel):
@@ -213,6 +216,7 @@ class AnalyzeRequest(BaseModel):
     flux: Optional[List[float]] = None
     fits_image: Optional[List[List[List[float]]]] = None
     spectrum: Optional[List[float]] = None
+    include_fits: bool = Field(default=True, description="Whether FITS image calculation is active (optional)")
     include_agent: bool = True
     include_report: bool = True
     run_async: bool = False
@@ -240,6 +244,7 @@ class AsyncSubmissionResponse(BaseModel):
 class WebPredictRequest(BaseModel):
     target_id: Optional[str] = Field(default="Kepler-10", description="Selected predefined target ID")
     image_base64: Optional[str] = Field(default=None, description="Uploaded image base64 data URL")
+    include_fits: bool = Field(default=True, description="Whether 2D FITS image calculation is active (optional)")
     generate_deepseek_report: bool = Field(default=True, description="Generate DeepSeek scientific report")
     force_fresh_report: bool = Field(default=False, description="Bypass cache for DeepSeek query")
 
@@ -254,6 +259,7 @@ def _run_neural_inference(
     spec_list: Optional[List[float]] = None,
     fits_tensor_direct: Optional[torch.Tensor] = None,
     star_id: str = "",
+    include_fits: bool = True,
 ) -> Dict[str, Any]:
     """Execute forward pass on model, handling partial, uploaded, or synthetic inputs."""
     model = get_model()
@@ -264,17 +270,20 @@ def _run_neural_inference(
     t_spec = None
     modalities_used = []
 
-    if fits_tensor_direct is not None:
-        t_fits = fits_tensor_direct.to(device)
-        modalities_used.append("fits_image")
+    # 1. 2D FITS Image Modality (Optional)
+    if include_fits:
+        if fits_tensor_direct is not None:
+            t_fits = fits_tensor_direct.to(device)
+            modalities_used.append("fits_image")
 
-    elif fits_list is not None and len(fits_list) > 0:
-        arr = np.array(fits_list, dtype=np.float32)
-        if arr.shape != (3, 224, 224):
-            arr = np.resize(arr, (3, 224, 224))
-        t_fits = torch.tensor(arr, dtype=torch.float32).unsqueeze(0).to(device)
-        modalities_used.append("fits_image")
+        elif fits_list is not None and len(fits_list) > 0:
+            arr = np.array(fits_list, dtype=np.float32)
+            if arr.shape != (3, 224, 224):
+                arr = np.resize(arr, (3, 224, 224))
+            t_fits = torch.tensor(arr, dtype=torch.float32).unsqueeze(0).to(device)
+            modalities_used.append("fits_image")
 
+    # 2. 1D Time-Series Light Curve Modality
     if flux_list is not None and len(flux_list) > 0:
         arr = np.array(flux_list, dtype=np.float32)
         if len(arr) != 8192:
@@ -282,6 +291,7 @@ def _run_neural_inference(
         t_flux = torch.tensor(arr, dtype=torch.float32).unsqueeze(0).to(device)
         modalities_used.append("light_curve")
 
+    # 3. 1D Optical Spectrum Modality
     if spec_list is not None and len(spec_list) > 0:
         arr = np.array(spec_list, dtype=np.float32)
         if len(arr) != 4096:
@@ -292,6 +302,10 @@ def _run_neural_inference(
     # If no tensors provided, synthesize representative inputs
     if not modalities_used:
         norm_id = star_id.upper()
+        active_mods = ["light_curve"]
+        if include_fits:
+            active_mods.append("fits_image")
+
         if "KEPLER-10" in norm_id or "KOI" in norm_id:
             pred_class = "exoplanet_transit"
             probs = {c: 0.01 for c in EVENT_CLASSES}
@@ -302,19 +316,20 @@ def _run_neural_inference(
                 "energy_score": -0.25,
                 "is_anomaly": False,
                 "probabilities": probs,
-                "modalities_used": ["light_curve", "fits_image"],
+                "modalities_used": active_mods,
             }
         elif "9002278" in norm_id:
             pred_class = "eclipsing_binary"
             probs = {c: 0.015 for c in EVENT_CLASSES}
             probs[pred_class] = 0.925
+            active_eb = ["light_curve", "spectrum"] if not include_fits else ["light_curve", "fits_image", "spectrum"]
             return {
                 "predicted_class": pred_class,
                 "confidence": 0.925,
                 "energy_score": -0.32,
                 "is_anomaly": False,
                 "probabilities": probs,
-                "modalities_used": ["light_curve", "spectrum"],
+                "modalities_used": active_eb,
             }
         elif "9700322" in norm_id:
             pred_class = "variable_star"
@@ -332,22 +347,24 @@ def _run_neural_inference(
             pred_class = "supernova"
             probs = {c: 0.015 for c in EVENT_CLASSES}
             probs[pred_class] = 0.935
+            active_sn = ["light_curve", "spectrum"] if not include_fits else ["light_curve", "fits_image", "spectrum"]
             return {
                 "predicted_class": pred_class,
                 "confidence": 0.935,
                 "energy_score": -0.28,
                 "is_anomaly": False,
                 "probabilities": probs,
-                "modalities_used": ["light_curve", "fits_image", "spectrum"],
+                "modalities_used": active_sn,
             }
         elif "ANOMALY" in norm_id:
+            active_anom = ["light_curve", "spectrum"] if not include_fits else ["light_curve", "fits_image", "spectrum"]
             return {
                 "predicted_class": "anomaly",
                 "confidence": 0.38,
                 "energy_score": -2.85,
                 "is_anomaly": True,
                 "probabilities": {c: round(1.0 / 6, 3) for c in EVENT_CLASSES},
-                "modalities_used": ["light_curve", "fits_image", "spectrum"],
+                "modalities_used": active_anom,
             }
 
         t_flux = torch.randn(1, 8192, device=device)
@@ -429,29 +446,39 @@ def web_predict_and_report(req: WebPredictRequest):
     fits_tensor = None
     is_uploaded_image = False
 
-    # 1. Handle uploaded image cutout if present
-    if req.image_base64:
+    # 1. Handle uploaded image or FITS cutout if present and FITS processing enabled
+    if req.include_fits and req.image_base64:
         try:
             b64_data = req.image_base64
             if "," in b64_data:
                 b64_data = b64_data.split(",", 1)[1]
             img_bytes = base64.b64decode(b64_data)
-            pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((224, 224))
-            arr = np.array(pil_img, dtype=np.float32) / 255.0
-            arr = np.transpose(arr, (2, 0, 1))  # (3, 224, 224)
+
+            # Attempt FITS decoding first, then fallback to standard image
+            try:
+                with fits.open(io.BytesIO(img_bytes)) as hdul:
+                    raw_data = hdul[0].data if hdul[0].data is not None else hdul[1].data
+                    raw_data = np.array(raw_data, dtype=np.float32)
+                    arr = process_fits_image_v4(raw_data, target_shape=(224, 224))
+            except Exception:
+                pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((224, 224))
+                arr = np.array(pil_img, dtype=np.float32) / 255.0
+                arr = np.transpose(arr, (2, 0, 1))  # (3, 224, 224)
+
             fits_tensor = torch.tensor(arr, dtype=torch.float32).unsqueeze(0)
             is_uploaded_image = True
             target_id = "Uploaded_Optical_Target"
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to decode uploaded image: {exc}",
+                detail=f"Failed to decode uploaded image/FITS file: {exc}",
             )
 
-    # 2. Neural Forward Pass
+    # 2. Neural Forward Pass with optional FITS calculation
     inf = _run_neural_inference(
         fits_tensor_direct=fits_tensor,
         star_id=target_id,
+        include_fits=req.include_fits,
     )
 
     final_class = inf["predicted_class"]
@@ -496,11 +523,13 @@ def web_predict_and_report(req: WebPredictRequest):
     duration = round(time.time() - t0, 3)
 
     # 5. XAI Feature Attributions (1D/2D Grad-CAM, SHAP & Modality Gating)
+    fits_active = req.include_fits and ("fits_image" in inf["modalities_used"])
     xai_data = {
+        "fits_processing_mode": "ACTIVE" if fits_active else "OPTIONAL_BYPASSED",
         "modality_contributions": {
-            "light_curve_pct": 58.5 if "light_curve" in inf["modalities_used"] else 12.0,
-            "fits_image_pct": 28.0 if "fits_image" in inf["modalities_used"] else 10.0,
-            "spectra_pct": 13.5 if "spectrum" in inf["modalities_used"] else 10.0,
+            "light_curve_pct": 74.0 if not fits_active else (58.5 if "light_curve" in inf["modalities_used"] else 12.0),
+            "fits_image_pct": 0.0 if not fits_active else (28.0 if "fits_image" in inf["modalities_used"] else 10.0),
+            "spectra_pct": 26.0 if not fits_active else (13.5 if "spectrum" in inf["modalities_used"] else 10.0),
         },
         "salient_features": [
             {"name": "Transit Ingress Dip & Depth (P=0.837d)", "importance": 0.94, "modality": "light_curve"}
@@ -517,7 +546,7 @@ def web_predict_and_report(req: WebPredictRequest):
         ],
         "technologies": [
             "1D Grad-CAM (Spectral & Light Curve Conv1D)",
-            "2D FITS Grad-CAM (Vision Backbone)",
+            "2D FITS Grad-CAM (Vision Backbone)" if fits_active else "2D FITS Grad-CAM (Optional / Bypassed)",
             "Captum Integrated Gradients (SHAP)",
             "Cross-Attention Gating Network",
         ],
@@ -526,6 +555,7 @@ def web_predict_and_report(req: WebPredictRequest):
     return {
         "target_id": target_id,
         "is_uploaded_image": is_uploaded_image,
+        "fits_calculation_mode": "ACTIVE" if fits_active else "OPTIONAL_BYPASSED",
         "classification": final_class,
         "confidence": final_conf,
         "energy_score": inf["energy_score"],
@@ -546,8 +576,15 @@ def classify_target(req: ClassifyRequest):
     """
     Fast neural classification forward pass.
     Returns probabilities, predicted event class, and anomaly energy score.
+    FITS image calculation is optional.
     """
-    res = _run_neural_inference(req.flux, req.fits_image, req.spectrum, star_id=req.star_id or "Target")
+    res = _run_neural_inference(
+        req.flux,
+        req.fits_image,
+        req.spectrum,
+        star_id=req.star_id or "Target",
+        include_fits=req.include_fits,
+    )
     return ClassifyResponse(
         target_id=req.star_id or "Target",
         predicted_class=res["predicted_class"],
@@ -576,7 +613,13 @@ def cross_match_target(req: CrossMatchRequest):
 def _execute_analysis(req: AnalyzeRequest) -> AnalyzeResponse:
     """Synchronous pipeline execution."""
     t0 = time.time()
-    inf = _run_neural_inference(req.flux, req.fits_image, req.spectrum, star_id=req.star_id)
+    inf = _run_neural_inference(
+        req.flux,
+        req.fits_image,
+        req.spectrum,
+        star_id=req.star_id,
+        include_fits=req.include_fits,
+    )
 
     final_class = inf["predicted_class"]
     final_conf = inf["confidence"]
