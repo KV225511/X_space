@@ -36,7 +36,7 @@ from src.data.preprocessing import process_spectrum_v4
 RAW_SPECTRA_DIR = Path("data/raw/spectra")
 PROCESSED_DIR   = Path("data/processed")
 MANIFEST_OUT    = PROCESSED_DIR / "sdss_spectra_manifest_600.csv"
-NPZ_OUT         = PROCESSED_DIR / "spectra_sdss_600.npz"
+NPZ_OUT         = PROCESSED_DIR / "spectra_sdss_real.npz"
 
 TARGETS_PER_CLASS = 100
 MAX_DOWNLOAD_WORKERS = 4
