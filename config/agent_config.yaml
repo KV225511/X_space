@@ -32,3 +32,8 @@ llm:
   openai_model: "gpt-4o"
   temperature: 0.2
   max_tokens: 1500
+
+rate_limit:
+  max_requests_per_turn: 50
+  window_seconds: 60.0
+  env_var: "RATE_LIMIT_PER_TURN"

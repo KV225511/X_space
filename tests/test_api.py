@@ -6,14 +6,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.main import app
+from src.api.rate_limiter import rate_limiter
 
 
 @pytest.fixture(autouse=True)
 def setup_test_env():
-    """Run API tests with offline mock database flags enabled."""
+    """Run API tests with offline mock database flags enabled and reset rate limits."""
     os.environ["ASTRO_OFFLINE_MODE"] = "1"
+    rate_limiter.reset()
     yield
     os.environ.pop("ASTRO_OFFLINE_MODE", None)
+    rate_limiter.reset()
 
 
 @pytest.fixture
@@ -119,3 +122,74 @@ def test_analyze_endpoint_asynchronous(client):
     task_data = task_resp.json()
     assert task_data["task_id"] == task_id
     assert task_data["status"] in ("PENDING", "RUNNING", "SUCCESS")
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiting Tests (Phase 9 Turn & Env Controls)
+# ---------------------------------------------------------------------------
+
+def test_rate_limiter_allows_requests_with_headers(client):
+    """Verify rate limiter allows requests and attaches rate limit headers."""
+    headers = {"X-Turn-ID": "test_turn_headers"}
+    response = client.get("/status", headers=headers)
+    assert response.status_code == 200
+    assert "x-ratelimit-limit" in response.headers
+    assert "x-ratelimit-remaining" in response.headers
+    assert int(response.headers["x-ratelimit-remaining"]) == rate_limiter.max_requests - 1
+
+
+def test_rate_limiter_blocks_when_quota_exhausted(client, monkeypatch):
+    """Verify rate limiter returns HTTP 429 when turn request limit is exceeded."""
+    monkeypatch.setenv("RATE_LIMIT_PER_TURN", "3")
+    headers = {"X-Turn-ID": "test_turn_exhaust"}
+
+    # 3 allowed requests
+    for i in range(3):
+        res = client.get("/status", headers=headers)
+        assert res.status_code == 200
+        assert int(res.headers["x-ratelimit-remaining"]) == 3 - (i + 1)
+
+    # 4th request must be blocked with HTTP 429
+    blocked = client.get("/status", headers=headers)
+    assert blocked.status_code == 429
+    data = blocked.json()
+    assert data["error"] == "Rate limit exceeded"
+    assert "Maximum 3 requests per turn allowed" in data["detail"]
+    assert blocked.headers["x-ratelimit-remaining"] == "0"
+    assert "retry-after" in blocked.headers
+
+
+def test_rate_limiter_turn_isolation(client, monkeypatch):
+    """Verify separate turns (X-Turn-ID) have isolated quotas."""
+    monkeypatch.setenv("RATE_LIMIT_PER_TURN", "2")
+
+    # Exhaust turn A
+    client.get("/status", headers={"X-Turn-ID": "turn_A"})
+    client.get("/status", headers={"X-Turn-ID": "turn_A"})
+    res_a_blocked = client.get("/status", headers={"X-Turn-ID": "turn_A"})
+    assert res_a_blocked.status_code == 429
+
+    # Turn B is fresh and allowed
+    res_b = client.get("/status", headers={"X-Turn-ID": "turn_B"})
+    assert res_b.status_code == 200
+    assert res_b.headers["x-ratelimit-remaining"] == "1"
+
+
+def test_rate_limiter_reads_env_dynamically(monkeypatch):
+    """Verify rate_limiter.max_requests dynamically reflects RATE_LIMIT_PER_TURN from env."""
+    monkeypatch.setenv("RATE_LIMIT_PER_TURN", "75")
+    assert rate_limiter.max_requests == 75
+
+    monkeypatch.setenv("RATE_LIMIT_PER_TURN", "50")
+    assert rate_limiter.max_requests == 50
+
+
+def test_health_endpoint_excluded_from_rate_limit(client, monkeypatch):
+    """Verify health endpoint is excluded from consuming rate limit turns."""
+    monkeypatch.setenv("RATE_LIMIT_PER_TURN", "1")
+    headers = {"X-Turn-ID": "turn_health"}
+
+    # Multiple calls to health should not be blocked or count against quota
+    for _ in range(3):
+        res = client.get("/health", headers=headers)
+        assert res.status_code == 200
