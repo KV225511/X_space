@@ -1,67 +1,109 @@
 import torch
 from tqdm import tqdm
-# import wandb  # We will uncomment this when you are ready to log graphs
+# import wandb  # Uncomment + `wandb login` to enable experiment tracking
 
 class Trainer:
-    def __init__(self, model, train_loader, val_loader, criterion, optimizer, device):
+    def __init__(self, model, train_loader, val_loader, criterion, optimizer, device, scheduler=None):
         self.model = model.to(device)
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.criterion = criterion
         self.optimizer = optimizer
         self.device = device
+        self.scheduler = scheduler
+
+    def _unpack_batch(self, batch):
+        """
+        Handles both batch shapes coming from our three Dataset classes:
+          - 3-item: (flux, mask, label)  <- NPZLightCurveDataset / LightCurveDataset
+          - 2-item: (inputs, label)       <- FITSDataset / SpectralDataset
+        Returns (inputs, labels, extra_kwargs).
+        extra_kwargs carries {'mask': mask} for the LightCurveEncoder
+        so the attention mask is passed through correctly.
+        """
+        if len(batch) == 3:
+            inputs, mask, labels = batch
+            inputs = inputs.to(self.device)
+            mask   = mask.to(self.device)
+            labels = labels.to(self.device)
+            return inputs, labels, {"mask": mask}
+        else:
+            inputs, labels = batch
+            inputs = inputs.to(self.device)
+            labels = labels.to(self.device)
+            return inputs, labels, {}
 
     def train_epoch(self, epoch):
-        self.model.train() # Put the model into training mode
+        self.model.train()
         running_loss = 0.0
-        
-        # Wrap the dataloader in a progress bar
+
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch} [Train]")
-        
+
         for batch in pbar:
-            inputs, labels = batch
-            inputs, labels = inputs.to(self.device), labels.to(self.device)
-            
-            # 1. Wipe the memory
+            inputs, labels, extra_kwargs = self._unpack_batch(batch)
+
+            # 1. Wipe accumulated gradients
             self.optimizer.zero_grad()
-            
-            # 2. Push data through the model
-            outputs = self.model(inputs)
-            
-            # 3. Calculate the penalty
+
+            # 2. Forward pass (pass mask kwarg if present)
+            outputs = self.model(inputs, **extra_kwargs)
+
+            # 3. Compute loss
             loss = self.criterion(outputs, labels)
-            
-            # 4 & 5. Figure out the fixes and apply them
+
+            # 4. Backprop and update
             loss.backward()
             self.optimizer.step()
-            
+
             running_loss += loss.item()
-            pbar.set_postfix({'loss': loss.item()})
-            
+            pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+
         return running_loss / len(self.train_loader)
 
     def val_epoch(self, epoch):
-        self.model.eval() # Put the model into strict testing mode (no learning allowed)
+        self.model.eval()
         running_loss = 0.0
-        
-        pbar = tqdm(self.val_loader, desc=f"Epoch {epoch} [Val]")
-        
-        with torch.no_grad(): # Disable calculus to save memory and speed up testing
+        correct = 0
+        total = 0
+
+        pbar = tqdm(self.val_loader, desc=f"Epoch {epoch} [Val]  ")
+
+        with torch.no_grad():
             for batch in pbar:
-                inputs, labels = batch
-                inputs, labels = inputs.to(self.device), labels.to(self.device)
-                
-                outputs = self.model(inputs)
+                inputs, labels, extra_kwargs = self._unpack_batch(batch)
+
+                outputs = self.model(inputs, **extra_kwargs)
                 loss = self.criterion(outputs, labels)
                 running_loss += loss.item()
-                
-        return running_loss / len(self.val_loader)
+
+                # Track accuracy
+                preds = outputs.argmax(dim=-1)
+                correct += (preds == labels).sum().item()
+                total   += labels.size(0)
+
+        acc = correct / total if total > 0 else 0.0
+        return running_loss / len(self.val_loader), acc
 
     def train(self, num_epochs):
-        print(f"Starting X_space training on {self.device} for {num_epochs} epochs...")
-        
+        print(f"Starting AstroFoundation training on {self.device} for {num_epochs} epochs...")
+        best_val_loss = float('inf')
+
         for epoch in range(1, num_epochs + 1):
-            train_loss = self.train_epoch(epoch)
-            val_loss = self.val_epoch(epoch)
-            
-            print(f"Epoch {epoch} Summary -> Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+            train_loss         = self.train_epoch(epoch)
+            val_loss, val_acc  = self.val_epoch(epoch)
+
+            if self.scheduler is not None:
+                self.scheduler.step()
+
+            marker = "  <- [BEST]" if val_loss < best_val_loss else ""
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+
+            current_lr = self.optimizer.param_groups[0]['lr']
+            print(
+                f"Epoch {epoch:>3}/{num_epochs}  "
+                f"Train Loss: {train_loss:.4f}  |  "
+                f"Val Loss: {val_loss:.4f}  |  "
+                f"Val Acc: {val_acc:.3f}  |  "
+                f"LR: {current_lr:.2e}{marker}"
+            )
