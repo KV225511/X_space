@@ -116,3 +116,44 @@ def process_spectrum_v4(observed_wavelength, flux, redshift_z=0.0, target_len=40
     normalized_flux = resampled_flux / (continuum + epsilon)
 
     return normalized_flux.astype(np.float32)
+
+
+# =====================================================================
+# 4. SPECTROSCOPIC DATA AUGMENTATION (PHYSICS-INFORMED)
+# =====================================================================
+def augment_spectrum(spectrum: np.ndarray, p: float = 0.5, rng: np.random.RandomState = None) -> np.ndarray:
+    """
+    Physics-informed 1D spectroscopic data augmentation:
+    1. Random Doppler velocity jitter: roll shift by up to ±4 bins (~±80 km/s)
+    2. Random instrumental Gaussian noise injection
+    3. Random subtle continuum tilt / extinction slope across wavelength
+    4. SpecAugment cutout: mask 10-25 contiguous bins to baseline (1.0)
+    """
+    if rng is None:
+        rng = np.random.RandomState()
+
+    aug = spectrum.copy()
+
+    # 1. Random Doppler shift
+    if rng.rand() < p:
+        shift = rng.randint(-4, 5)
+        aug = np.roll(aug, shift)
+
+    # 2. Random Gaussian noise injection
+    if rng.rand() < p:
+        noise = rng.normal(0.0, 0.015, size=len(aug))
+        aug = aug + noise
+
+    # 3. Continuum tilt / reddening slope
+    if rng.rand() < p:
+        slope = rng.uniform(-0.04, 0.04)
+        tilt = np.linspace(1.0 - slope, 1.0 + slope, len(aug))
+        aug = aug * tilt
+
+    # 4. SpecAugment cutout
+    if rng.rand() < p:
+        cutout_width = rng.randint(10, 25)
+        start_idx = rng.randint(0, len(aug) - cutout_width)
+        aug[start_idx : start_idx + cutout_width] = 1.0
+
+    return np.clip(aug, 0.01, 10.0).astype(np.float32)

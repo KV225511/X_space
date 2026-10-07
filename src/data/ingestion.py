@@ -1,4 +1,5 @@
 import lightkurve as lk
+import numpy as np
 from astropy.io import fits
 from functools import lru_cache
 from .preprocessing import (
