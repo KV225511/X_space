@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from unittest.mock import patch
 
-from src.data.dataset import LightCurveDataset, FITSDataset, SpectralDataset
+from src.data.dataset import LightCurveDataset, FITSDataset, SpectralDataset, NPZLightCurveDataset
 from src.data.dataloaders import create_dataloader, get_dataloaders
 
 # =====================================================================
@@ -123,3 +123,95 @@ def test_dataloader_batch_dimensions(dummy_light_curve_data):
     assert batch_flux.shape == (16, 8192), "Batch shape mismatch for flux."
     assert batch_mask.shape == (16, 8192), "Batch shape mismatch for mask."
     assert batch_labels.shape == (16,), "Batch shape mismatch for labels."
+
+
+# =====================================================================
+# NPZ DATASET TESTS (Offline, uses in-memory mock NPZ)
+# =====================================================================
+
+@pytest.fixture
+def mock_npz(tmp_path):
+    """Creates a tiny fake .npz archive to test NPZLightCurveDataset offline."""
+    n = 50
+    npz_file = tmp_path / "mock_light_curves.npz"
+    np.savez(
+        npz_file,
+        flux=np.random.randn(n, 8192).astype(np.float32),
+        masks=np.ones((n, 8192), dtype=np.float32),
+        labels=np.random.randint(0, 6, size=(n,), dtype=np.int64),
+        kic_ids=np.arange(n, dtype=np.int64),
+        class_names=np.array(["exoplanet_transit"] * n),
+    )
+    return str(npz_file)
+
+
+def test_npz_dataset_contract(mock_npz):
+    """Verifies NPZLightCurveDataset returns correct shapes and dtypes."""
+    dataset = NPZLightCurveDataset(mock_npz)
+    assert len(dataset) == 50
+
+    flux, mask, label = dataset[0]
+    assert flux.shape  == (8192,),  f"Expected (8192,), got {flux.shape}"
+    assert mask.shape  == (8192,),  f"Expected (8192,), got {mask.shape}"
+    assert flux.dtype  == torch.float32
+    assert mask.dtype  == torch.bool
+    assert label.dtype == torch.long
+
+
+def test_npz_dataset_index_subsetting(mock_npz):
+    """Verifies that the indices parameter correctly subsets the dataset."""
+    train_idx = np.arange(35)  # first 35
+    val_idx   = np.arange(35, 50)  # last 15
+
+    train_ds = NPZLightCurveDataset(mock_npz, indices=train_idx)
+    val_ds   = NPZLightCurveDataset(mock_npz, indices=val_idx)
+
+    assert len(train_ds) == 35
+    assert len(val_ds)   == 15
+
+
+def test_npz_dataloader_batch(mock_npz):
+    """Verifies batching from NPZLightCurveDataset produces correct shapes."""
+    dataset = NPZLightCurveDataset(mock_npz)
+    loader  = create_dataloader(dataset, batch_size=8, is_training=True, num_workers=0)
+
+    batch_flux, batch_mask, batch_labels = next(iter(loader))
+    assert batch_flux.shape   == (8, 8192)
+    assert batch_mask.shape   == (8, 8192)
+    assert batch_labels.shape == (8,)
+
+
+@pytest.fixture
+def mock_spectral_npz(tmp_path):
+    """Creates a tiny fake .npz archive to test NPZSpectralDataset offline."""
+    n = 40
+    npz_file = tmp_path / "mock_spectra.npz"
+    np.savez(
+        npz_file,
+        spectra=np.random.randn(n, 4096).astype(np.float32),
+        labels=np.random.randint(0, 6, size=(n,), dtype=np.int64),
+    )
+    return str(npz_file)
+
+
+def test_npz_spectral_dataset_contract(mock_spectral_npz):
+    """Verifies NPZSpectralDataset returns correct shapes and dtypes."""
+    from src.data.dataset import NPZSpectralDataset
+    dataset = NPZSpectralDataset(mock_spectral_npz)
+    assert len(dataset) == 40
+
+    spectrum, label = dataset[0]
+    assert spectrum.shape == (4096,)
+    assert spectrum.dtype == torch.float32
+    assert label.dtype == torch.long
+
+
+def test_npz_spectral_dataset_augmentation(mock_spectral_npz):
+    """Verifies NPZSpectralDataset correctly applies data augmentation while preserving shapes."""
+    from src.data.dataset import NPZSpectralDataset
+    dataset = NPZSpectralDataset(mock_spectral_npz, augment=True)
+    spectrum, label = dataset[0]
+    assert spectrum.shape == (4096,)
+    assert spectrum.dtype == torch.float32
+    assert label.dtype == torch.long
+    assert not torch.isnan(spectrum).any()
