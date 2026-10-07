@@ -132,12 +132,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Identifies clients by X-Turn-ID header, X-Session-ID, X-Forwarded-For, or client host IP.
     """
 
-    EXCLUDED_PATHS = {"/docs", "/redoc", "/openapi.json", "/health"}
+    EXCLUDED_PATHS = {
+        "/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+        "/health",
+        "/api/targets",
+        "/api/moderation-stats",
+    }
+    STATIC_EXTENSIONS = {".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".woff", ".woff2", ".html"}
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        if path in self.EXCLUDED_PATHS:
+        if path in self.EXCLUDED_PATHS or any(path.endswith(ext) for ext in self.STATIC_EXTENSIONS):
             return await call_next(request)
 
         # Identify client key: prefers explicit turn header, then session, then IP

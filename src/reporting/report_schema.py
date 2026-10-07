@@ -42,3 +42,7 @@ class AstronomicalReport(BaseModel):
         description="UTC timestamp of report generation"
     )
     model_version: str = Field(default="AstroFoundation-v4.0", description="Foundation model pipeline release")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Operational metadata including DeepSeek source, cache status, and moderation metrics"
+    )

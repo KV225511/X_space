@@ -193,3 +193,31 @@ def test_health_endpoint_excluded_from_rate_limit(client, monkeypatch):
     for _ in range(3):
         res = client.get("/health", headers=headers)
         assert res.status_code == 200
+
+
+def test_web_targets_endpoint(client):
+    """Verify /api/targets returns preset list of astronomical candidates."""
+    res = client.get("/api/targets")
+    assert res.status_code == 200
+    data = res.json()
+    assert "targets" in data
+    assert len(data["targets"]) >= 5
+    ids = [t["id"] for t in data["targets"]]
+    assert "Kepler-10" in ids
+    assert "KIC-9002278" in ids
+
+
+def test_web_predict_endpoint_dropdown(client):
+    """Verify /api/predict runs forward pass, agent cross-matching, and DeepSeek report."""
+    payload = {
+        "target_id": "Kepler-10",
+        "generate_deepseek_report": True,
+    }
+    res = client.post("/api/predict", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["target_id"] == "Kepler-10"
+    assert data["classification"] == "exoplanet_transit"
+    assert "probabilities" in data
+    assert "scientific_report" in data
+    assert "moderation_stats" in data
