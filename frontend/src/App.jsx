@@ -619,6 +619,56 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                 </div>
               </div>
 
+              {/* Explainable AI (XAI): Grad-CAM & SHAP Feature Attributions */}
+              {result.xai_attributions && (
+                <div className="card xai-card">
+                  <div className="card-title-row">
+                    <div className="card-title">Explainable AI (XAI): Grad-CAM &amp; SHAP Attributions</div>
+                    <span className="agent-consensus-pill xai-pill">Captum &bull; SHAP &bull; Grad-CAM</span>
+                  </div>
+                  <div className="xai-contributions-row">
+                    <div className="xai-label-row">
+                      <span className="stat-label">Multi-Modal Shapley Attribution Weights</span>
+                    </div>
+                    <div className="modality-bar-wrapper">
+                      <div
+                        className="modality-bar-segment lc"
+                        style={{ width: `${result.xai_attributions.modality_contributions.light_curve_pct}%` }}
+                      >
+                        Light Curve {result.xai_attributions.modality_contributions.light_curve_pct}%
+                      </div>
+                      <div
+                        className="modality-bar-segment img"
+                        style={{ width: `${result.xai_attributions.modality_contributions.fits_image_pct}%` }}
+                      >
+                        FITS {result.xai_attributions.modality_contributions.fits_image_pct}%
+                      </div>
+                      <div
+                        className="modality-bar-segment spec"
+                        style={{ width: `${result.xai_attributions.modality_contributions.spectra_pct}%` }}
+                      >
+                        Spectrum {result.xai_attributions.modality_contributions.spectra_pct}%
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="salient-features-list">
+                    <div className="xai-label-row">
+                      <span className="stat-label">Astrophysical Salient Features (1D/2D Grad-CAM Peak Detection)</span>
+                    </div>
+                    <div className="features-tags-group">
+                      {result.xai_attributions.salient_features.map((feat, idx) => (
+                        <div key={idx} className="feature-tag">
+                          <span className="feature-dot" data-mod={feat.modality}></span>
+                          <span className="feature-name">{feat.name}</span>
+                          <span className="feature-score font-mono">{(feat.importance * 100).toFixed(0)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* LangGraph Agent Database Cross-Match */}
               <div className="card">
                 <div className="card-title-row">

@@ -1,7 +1,9 @@
 """
 Unit tests for AstroFoundation Explainability & Metrics:
 - 1D Grad-CAM (GradCAM1D)
+- 2D FITS Grad-CAM (GradCAM2D)
 - SmoothGrad Input Saliency (SaliencyExplainer)
+- SHAP / Integrated Gradients (ShapleyExplainer)
 - MultiModal Gating Explainer
 - AUROC Metric
 """
@@ -16,7 +18,9 @@ from src.models.transformer_encoder import LightCurveEncoder
 from src.models.fusion import CrossAttentionFusion
 from src.evaluation.explainability import (
     GradCAM1D,
+    GradCAM2D,
     SaliencyExplainer,
+    ShapleyExplainer,
     MultiModalGatingExplainer,
     Explanation1DOutput,
     CANONICAL_SPECTRAL_LINES
@@ -46,6 +50,19 @@ class LightCurveClassifier(nn.Module):
         return self.head(emb)
 
 
+class Conv2DImageClassifier(nn.Module):
+    def __init__(self, num_classes: int = 6):
+        super().__init__()
+        self.conv = nn.Conv2d(3, 16, kernel_size=3, padding=1)
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(16, num_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = torch.relu(self.conv(x))
+        h = self.pool(h).flatten(1)
+        return self.fc(h)
+
+
 def test_gradcam1d_on_spectral_encoder():
     torch.manual_seed(42)
     model = SpectralClassifier(num_classes=6)
@@ -64,7 +81,21 @@ def test_gradcam1d_on_spectral_encoder():
     assert 0 <= explanation.target_class < 6
     assert 0.0 <= explanation.confidence <= 1.0
 
-    # Ensure hooks can be cleaned up cleanly
+    cam.remove_hooks()
+    assert len(cam._handles) == 0
+
+
+def test_gradcam2d_on_image_backbone():
+    torch.manual_seed(42)
+    model = Conv2DImageClassifier(num_classes=6)
+    cam = GradCAM2D(model, model.conv)
+
+    x = torch.randn(1, 3, 32, 32)
+    heatmap = cam.generate(x, target_class=1)
+
+    assert heatmap.shape == (32, 32)
+    assert heatmap.min() >= 0.0
+    assert heatmap.max() <= 1.0
     cam.remove_hooks()
     assert len(cam._handles) == 0
 
@@ -82,6 +113,18 @@ def test_saliency_explainer_on_light_curve():
     assert saliency.min() >= 0.0
     assert saliency.max() <= 1.0
     assert not np.isnan(saliency).any()
+
+
+def test_shapley_explainer_integrated_gradients():
+    torch.manual_seed(42)
+    linear_model = nn.Linear(64, 6)
+    explainer = ShapleyExplainer(linear_model)
+
+    x = torch.randn(1, 64)
+    attrs = explainer.attribute_integrated_gradients(x, target_class=0, n_steps=5)
+
+    assert attrs.shape == (64,)
+    assert not np.isnan(attrs).any()
 
 
 def test_multimodal_gating_explainer():
@@ -110,7 +153,6 @@ def test_multimodal_gating_explainer():
 def test_compute_auroc():
     n = 100
     y_true = np.random.randint(0, 3, size=n)
-    # True one-hot with noise
     y_scores = np.zeros((n, 3))
     for i in range(n):
         y_scores[i, y_true[i]] = 2.0

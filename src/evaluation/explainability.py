@@ -1,13 +1,15 @@
 """
-AstroFoundation — Explainability & Interpretability (1D Grad-CAM & Saliency)
-============================================================================
+AstroFoundation — Explainability & Interpretability (Grad-CAM, SHAP, Saliency & Gating)
+======================================================================================
 Provides astrophysically grounded interpretability for 1D light curves,
-stellar spectra, and multi-modal fusion:
+stellar spectra, 2D FITS images, and multi-modal fusion:
 
 1. GradCAM1D: 1D Gradient-weighted Class Activation Mapping for Conv1D backbones.
-2. SaliencyExplainer: Input gradient and SmoothGrad saliency maps for 1D sequences.
-3. MultiModalGatingExplainer: Quantifies modality contribution weights from cross-attention.
-4. LineIdentifier: Matches salient spectral regions with canonical atomic emission/absorption lines.
+2. GradCAM2D: 2D Spatial Grad-CAM for FITS vision backbones (PSF, host galaxy, transients).
+3. SaliencyExplainer: Input gradient and SmoothGrad saliency maps for 1D sequences.
+4. ShapleyExplainer: Captum Integrated Gradients (Axiomatic Attribution) & SHAP KernelExplainer.
+5. MultiModalGatingExplainer: Quantifies modality contribution weights from cross-attention gating.
+6. LineIdentifier: Matches salient spectral regions with canonical atomic emission/absorption lines.
 """
 
 from dataclasses import dataclass
@@ -92,15 +94,6 @@ class GradCAM1D:
     ) -> Explanation1DOutput:
         """
         Generates 1D Grad-CAM saliency map for input sequence x.
-
-        Args:
-            x: Input tensor of shape (1, L) or (1, 1, L).
-            target_class: Class to explain (default: argmax predicted class).
-            wavelength_grid: Optional array of wavelength values matching L.
-            line_tolerance_angstroms: Tolerance window for matching atomic lines.
-
-        Returns:
-            Explanation1DOutput containing normalized saliency and atomic line matches.
         """
         self.model.eval()
         self.model.zero_grad()
@@ -124,8 +117,6 @@ class GradCAM1D:
         if self.activations is None or self.gradients is None:
             raise RuntimeError("Hooks failed to capture activations or gradients.")
 
-        # activations: (1, Channels, Length_feat)
-        # gradients:   (1, Channels, Length_feat)
         activations = self.activations[0]
         gradients = self.gradients[0]
 
@@ -136,8 +127,8 @@ class GradCAM1D:
         cam = torch.sum(alpha * activations, dim=0)  # (Length_feat,)
         cam = F.relu(cam)  # ReLU: only features with positive contribution
 
-        # Interpolate up to input length (target_len)
-        cam = cam.unsqueeze(0).unsqueeze(0)  # (1, 1, Length_feat)
+        # Interpolate up to input length
+        cam = cam.unsqueeze(0).unsqueeze(0)
         cam = F.interpolate(cam, size=target_len, mode='linear', align_corners=False)
         cam = cam.squeeze().detach().cpu().numpy()
 
@@ -155,7 +146,6 @@ class GradCAM1D:
         if wavelength_grid is None:
             wavelength_grid = np.linspace(3800.0, 9200.0, target_len)
 
-        # Peak detection: threshold > 0.40
         high_sal_mask = saliency > 0.40
         peak_indices = np.where(high_sal_mask)[0]
 
@@ -189,9 +179,85 @@ class GradCAM1D:
         )
 
 
+class GradCAM2D:
+    """
+    2D Grad-CAM implementation for convolutional vision backbones (FITS images).
+    Identifies salient spatial pixel clusters (e.g. PSF core, host galaxy, companion blending).
+    """
+    def __init__(self, model: nn.Module, target_layer: nn.Module):
+        self.model = model
+        self.target_layer = target_layer
+        self.activations: Optional[torch.Tensor] = None
+        self.gradients: Optional[torch.Tensor] = None
+        self._handles = []
+        self._register_hooks()
+
+    def _register_hooks(self):
+        def forward_hook(module, inp, out):
+            self.activations = out
+
+        def backward_hook(module, grad_in, grad_out):
+            self.gradients = grad_out[0]
+
+        h1 = self.target_layer.register_forward_hook(forward_hook)
+        h2 = self.target_layer.register_full_backward_hook(backward_hook)
+        self._handles.extend([h1, h2])
+
+    def remove_hooks(self):
+        for h in self._handles:
+            h.remove()
+        self._handles.clear()
+
+    def generate(
+        self,
+        x: torch.Tensor,
+        target_class: Optional[int] = None,
+    ) -> np.ndarray:
+        """
+        Generates 2D Grad-CAM heatmap normalized to [0, 1] matching (H, W) of input image.
+        """
+        self.model.eval()
+        self.model.zero_grad()
+
+        if x.dim() == 3:
+            x = x.unsqueeze(0)
+        _, _, H, W = x.shape
+
+        logits = self.model(x)
+        if hasattr(logits, 'logits'):
+            logits = logits.logits
+
+        if target_class is None:
+            target_class = int(torch.argmax(logits, dim=-1).item())
+
+        score = logits[0, target_class]
+        score.backward(retain_graph=True)
+
+        if self.activations is None or self.gradients is None:
+            raise RuntimeError("Hooks failed to capture 2D activations/gradients.")
+
+        acts = self.activations[0]
+        grads = self.gradients[0]
+
+        # Spatial Global Average Pooling
+        weights = torch.mean(grads, dim=(-2, -1), keepdim=True)
+        cam = torch.sum(weights * acts, dim=0)
+        cam = F.relu(cam)
+
+        # Upsample to input resolution
+        cam = cam.unsqueeze(0).unsqueeze(0)
+        cam = F.interpolate(cam, size=(H, W), mode='bilinear', align_corners=False)
+        cam = cam.squeeze().detach().cpu().numpy()
+
+        c_min, c_max = np.min(cam), np.max(cam)
+        if c_max - c_min > 1e-8:
+            return (cam - c_min) / (c_max - c_min)
+        return np.zeros_like(cam)
+
+
 class SaliencyExplainer:
     """
-    Computes input gradient saliency maps and SmoothGrad for any 1D model.
+    Computes input gradient saliency maps and SmoothGrad for 1D models.
     """
     def __init__(self, model: nn.Module):
         self.model = model
@@ -240,6 +306,74 @@ class SaliencyExplainer:
         return np.zeros_like(smooth_saliency)
 
 
+class ShapleyExplainer:
+    """
+    SHAP & Integrated Gradients Explainer for AstroFoundation.
+    Uses Captum IntegratedGradients for axiomatic path attribution and
+    SHAP KernelExplainer for feature importance credit assignment.
+    """
+    def __init__(self, model: nn.Module):
+        self.model = model
+
+    def attribute_integrated_gradients(
+        self,
+        x: torch.Tensor,
+        target_class: Optional[int] = None,
+        n_steps: int = 25,
+    ) -> np.ndarray:
+        """
+        Computes path-integrated gradients (Axiomatic Attribution / Aumann-Shapley values):
+        IG_i(x) = (x_i - x_i') * \\int_0^1 \\frac{\\partial F(x' + \\alpha(x - x'))}{\\partial x_i} d\\alpha
+        """
+        self.model.eval()
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+
+        baseline = torch.zeros_like(x)
+        if target_class is None:
+            with torch.no_grad():
+                out = self.model(x)
+                if hasattr(out, 'logits'):
+                    out = out.logits
+                target_class = int(torch.argmax(out, dim=-1).item())
+
+        from captum.attr import IntegratedGradients
+        ig = IntegratedGradients(self.model)
+        attributions = ig.attribute(x, baselines=baseline, target=target_class, n_steps=n_steps)
+        attr_np = attributions.squeeze().detach().cpu().numpy()
+        return attr_np
+
+    def attribute_kernel_shap(
+        self,
+        x: np.ndarray,
+        background_samples: np.ndarray,
+        target_class: int = 0,
+        nsamples: int = 50,
+    ) -> np.ndarray:
+        """
+        Computes KernelSHAP feature importances using shap.KernelExplainer.
+        """
+        import shap
+
+        def model_predict(data: np.ndarray):
+            with torch.no_grad():
+                tensor = torch.tensor(data, dtype=torch.float32)
+                preds = self.model(tensor)
+                if hasattr(preds, 'probabilities'):
+                    preds = preds.probabilities
+                elif hasattr(preds, 'logits'):
+                    preds = F.softmax(preds.logits, dim=-1)
+                else:
+                    preds = F.softmax(preds, dim=-1)
+                return preds.cpu().numpy()
+
+        explainer = shap.KernelExplainer(model_predict, background_samples)
+        shap_values = explainer.shap_values(x, nsamples=nsamples)
+        if isinstance(shap_values, list):
+            return shap_values[target_class]
+        return shap_values
+
+
 class MultiModalGatingExplainer:
     """
     Extracts and explains modality contribution weights from CrossAttentionFusion.
@@ -249,20 +383,16 @@ class MultiModalGatingExplainer:
         """
         Computes percentage contribution of each modality branch via gating sigma network.
         """
-        # If fusion module has gating_network
         if hasattr(fusion_module, 'gating_network'):
-            # Gating network takes concatenated modalities
             with torch.no_grad():
-                # Filter non-None
                 valid = [e for e in embeddings if e is not None]
                 if len(valid) == 3:
                     concat = torch.cat(valid, dim=-1)
                     weights = fusion_module.gating_network(concat)[0].cpu().numpy()
                     w_sum = np.sum(weights) + 1e-8
                     return {
-                        "light_curve_pct": float((weights[0] / w_sum) * 100.0),
-                        "fits_image_pct":  float((weights[1] / w_sum) * 100.0),
-                        "spectra_pct":     float((weights[2] / w_sum) * 100.0),
+                        "light_curve_pct": float(round((weights[0] / w_sum) * 100.0, 1)),
+                        "fits_image_pct":  float(round((weights[1] / w_sum) * 100.0, 1)),
+                        "spectra_pct":     float(round((weights[2] / w_sum) * 100.0, 1)),
                     }
-        # Equal weights fallback
         return {"light_curve_pct": 33.3, "fits_image_pct": 33.3, "spectra_pct": 33.3}

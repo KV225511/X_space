@@ -996,6 +996,117 @@
 }
 
 /* ------------------------------------------------------------------------------
+   Explainable AI (XAI) Styles
+   ------------------------------------------------------------------------------ */
+.xai-card {
+  border-color: rgba(6, 182, 212, 0.25);
+  background: linear-gradient(135deg, rgba(10, 14, 28, 0.8) 0%, rgba(18, 24, 46, 0.6) 100%);
+}
+
+.xai-pill {
+  background: rgba(6, 182, 212, 0.15);
+  color: #67e8f9;
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+.xai-contributions-row {
+  margin-bottom: 1.1rem;
+}
+
+.xai-label-row {
+  margin-bottom: 0.45rem;
+}
+
+.modality-bar-wrapper {
+  display: flex;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: rgba(10, 14, 28, 0.8);
+}
+
+.modality-bar-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: #ffffff;
+  transition: width 0.6s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 0.3rem;
+}
+
+.modality-bar-segment.lc {
+  background: linear-gradient(90deg, #3b82f6 0%, #6366f1 100%);
+}
+
+.modality-bar-segment.img {
+  background: linear-gradient(90deg, #8b5cf6 0%, #a855f7 100%);
+}
+
+.modality-bar-segment.spec {
+  background: linear-gradient(90deg, #06b6d4 0%, #10b981 100%);
+}
+
+.salient-features-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.features-tags-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.feature-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(22, 30, 56, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: #e2e8f0;
+}
+
+.feature-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.feature-dot[data-mod="light_curve"] {
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+}
+
+.feature-dot[data-mod="fits_image"] {
+  background: #c084fc;
+  box-shadow: 0 0 6px #c084fc;
+}
+
+.feature-dot[data-mod="spectrum"] {
+  background: #34d399;
+  box-shadow: 0 0 6px #34d399;
+}
+
+.feature-score {
+  color: var(--text-accent);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.35rem;
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------------------------
    Footer
    ------------------------------------------------------------------------------ */
 .app-footer {
