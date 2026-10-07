@@ -1,6 +1,9 @@
 import torch
+import numpy as np
 from torch.utils.data import Dataset
+
 from .ingestion import load_light_curve, load_fits_image, load_spectrum
+from .preprocessing import augment_spectrum
 
 # =====================================================================
 # 1. LIGHT CURVE DATASET
@@ -91,3 +94,75 @@ class SpectralDataset(Dataset):
         label_tensor = torch.tensor(label, dtype=torch.long)
 
         return spectral_tensor, label_tensor
+
+
+# =====================================================================
+# 4. NPZ LIGHT CURVE DATASET (Pre-downloaded, offline, fast)
+# =====================================================================
+class NPZLightCurveDataset(Dataset):
+    """
+    Fast offline PyTorch Dataset that reads from the pre-built
+    data/processed/light_curves_2000.npz archive.
+    No network calls — all data is already on disk.
+    Outputs:
+      - flux_tensor: shape (8192,) float32
+      - mask_tensor: shape (8192,) bool
+      - label_tensor: scalar long
+    """
+    def __init__(self, npz_path: str, indices=None):
+        """
+        Args:
+            npz_path: Path to light_curves_2000.npz
+            indices:  Optional list/array of row indices for train/val/test split.
+                      If None, loads all 2000 samples.
+        """
+        data = np.load(npz_path, allow_pickle=True)
+        self.flux   = data['flux']    # (N, 8192) float32
+        self.masks  = data['masks']   # (N, 8192) float32  → converted to bool
+        self.labels = data['labels']  # (N,)      int64
+
+        if indices is not None:
+            self.flux   = self.flux[indices]
+            self.masks  = self.masks[indices]
+            self.labels = self.labels[indices]
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, index):
+        flux_tensor  = torch.tensor(self.flux[index],            dtype=torch.float32)
+        mask_tensor  = torch.tensor(self.masks[index] > 0.5,     dtype=torch.bool)
+        label_tensor = torch.tensor(int(self.labels[index]),     dtype=torch.long)
+        return flux_tensor, mask_tensor, label_tensor
+
+
+# =====================================================================
+# 5. NPZ SPECTRAL DATASET (Pre-processed 4096-bin spectra, offline)
+# =====================================================================
+class NPZSpectralDataset(Dataset):
+    """
+    Fast offline PyTorch Dataset that reads from data/processed/spectra_2000.npz or SDSS archives.
+    Outputs:
+      - spectral_tensor: shape (4096,) float32
+      - label_tensor: scalar long
+    """
+    def __init__(self, npz_path: str, indices=None, augment: bool = False):
+        data = np.load(npz_path, allow_pickle=True)
+        self.spectra = data['spectra']  # (N, 4096) float32
+        self.labels  = data['labels']   # (N,)      int64
+        self.augment = augment
+
+        if indices is not None:
+            self.spectra = self.spectra[indices]
+            self.labels  = self.labels[indices]
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, index):
+        spec = self.spectra[index]
+        if self.augment:
+            spec = augment_spectrum(spec)
+        spec_tensor  = torch.tensor(spec,                    dtype=torch.float32)
+        label_tensor = torch.tensor(int(self.labels[index]), dtype=torch.long)
+        return spec_tensor, label_tensor
