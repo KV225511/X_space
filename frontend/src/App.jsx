@@ -76,6 +76,9 @@ export default function App() {
   const [selectedTargetId, setSelectedTargetId] = useState("Kepler-10");
   const [mode, setMode] = useState("dropdown"); // "dropdown" | "upload"
   const [uploadedImageBase64, setUploadedImageBase64] = useState(null);
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const [isFitsFile, setIsFitsFile] = useState(false);
+  const [customTargetId, setCustomTargetId] = useState("");
   const [includeFits, setIncludeFits] = useState(true);
   const [generateDeepSeek, setGenerateDeepSeek] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -173,10 +176,16 @@ export default function App() {
     ctx.fill();
   }, [currentTarget, mode]);
 
-  // Handle image upload file selection
+  // Handle image or FITS upload file selection
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setUploadedFileName(file.name);
+    const fname = file.name.toLowerCase();
+    const isFits = fname.endsWith('.fits') || fname.endsWith('.fit') || fname.endsWith('.fts');
+    setIsFitsFile(isFits);
+    setIncludeFits(true); // Automatically ensure FITS is enabled when user uploads FITS
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -250,8 +259,12 @@ export default function App() {
   const handleRunPrediction = async () => {
     setLoading(true);
 
+    const targetName = mode === "dropdown"
+      ? selectedTargetId
+      : (customTargetId.trim() || uploadedFileName.replace(/\.[^/.]+$/, "") || "Custom_FITS_Target");
+
     const payload = {
-      target_id: mode === "dropdown" ? selectedTargetId : "Uploaded_Target",
+      target_id: targetName,
       image_base64: mode === "upload" && includeFits ? uploadedImageBase64 : null,
       include_fits: includeFits,
       generate_deepseek_report: generateDeepSeek,
@@ -388,7 +401,7 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                 className={`toggle-btn ${mode === 'upload' ? 'active' : ''}`}
                 onClick={() => setMode('upload')}
               >
-                Upload Image Cutout
+                📁 Upload FITS / Image Data
               </button>
             </div>
           </div>
@@ -464,11 +477,40 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                     </div>
                     <canvas ref={previewCanvasRef} width={420} height={90} className="canvas-plot"></canvas>
                   </div>
+
+                  {/* FITS Source Status & Direct Navigation */}
+                  <div className="catalog-fits-status-bar">
+                    <div className="fits-status-info">
+                      <span className="status-label">2D FITS Source:</span>
+                      <span className="status-value">Auto-linked from NASA SkyView &amp; Kepler TPF</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="switch-to-upload-btn"
+                      onClick={() => setMode('upload')}
+                    >
+                      Upload Custom .FITS File &rarr;
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           ) : (
             <div className="tab-content">
+              {/* Optional Custom Target Identifier */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="custom-target-id">Custom Target Name / Catalog ID (Optional)</label>
+                <input
+                  id="custom-target-id"
+                  type="text"
+                  className="custom-text-input"
+                  placeholder="e.g. TIC-25155310, KIC-9002278, or SN-2026xyz"
+                  value={customTargetId}
+                  onChange={(e) => setCustomTargetId(e.target.value)}
+                />
+              </div>
+
+              {/* FITS & Optical Image Dropzone */}
               <div
                 className="upload-dropzone"
                 onClick={() => fileInputRef.current?.click()}
@@ -476,23 +518,38 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.fits"
+                  accept=".fits,.fit,.fts,image/*"
                   className="file-input-hidden"
                   onChange={handleFileChange}
                 />
                 {!uploadedImageBase64 ? (
                   <div>
-                    <span className="dropzone-icon">🌌</span>
-                    <p className="dropzone-text"><strong>Drag &amp; drop an astronomical image</strong> or click to browse</p>
-                    <p className="dropzone-sub">Supports FITS cutouts, PNG, JPEG, TIFF (224 &times; 224 normalized)</p>
+                    <span className="dropzone-icon">📁</span>
+                    <p className="dropzone-text"><strong>Drag &amp; drop your .FITS file or optical image</strong> here</p>
+                    <p className="dropzone-sub">Supports Astronomical FITS (.fits, .fit) and Optical Cutouts (PNG, JPEG)</p>
+                    <button type="button" className="browse-files-btn">Browse Local Files</button>
                   </div>
                 ) : (
                   <div className="image-preview-wrapper" onClick={(e) => e.stopPropagation()}>
-                    <img src={uploadedImageBase64} alt="Astronomical Cutout Preview" />
+                    {isFitsFile ? (
+                      <div className="fits-file-preview-card">
+                        <span className="fits-badge-icon">🔭</span>
+                        <div className="fits-badge-text">
+                          <span className="fits-badge-filename">{uploadedFileName || "astronomical_target.fits"}</span>
+                          <span className="fits-badge-meta">Astronomical FITS Array Loaded &bull; Ready for 2D ArcSinh/MAD Ingestion</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <img src={uploadedImageBase64} alt="Astronomical Cutout Preview" />
+                    )}
                     <button
                       className="remove-img-btn"
-                      onClick={() => setUploadedImageBase64(null)}
-                      title="Remove image"
+                      onClick={() => {
+                        setUploadedImageBase64(null);
+                        setUploadedFileName("");
+                        setIsFitsFile(false);
+                      }}
+                      title="Remove file"
                     >
                       &times;
                     </button>
@@ -502,14 +559,14 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
 
               {/* Preset Sample Buttons */}
               <div className="sample-cutouts-group">
-                <span className="chip-label">Try sample cutouts:</span>
-                <button className="sample-cutout-btn" onClick={() => generateSampleCutout('transit')}>
+                <span className="chip-label">Try sample astronomical cutouts:</span>
+                <button className="sample-cutout-btn" onClick={() => { generateSampleCutout('transit'); setIsFitsFile(false); setUploadedFileName("kepler10_sample.png"); }}>
                   🪐 Exoplanet PSF
                 </button>
-                <button className="sample-cutout-btn" onClick={() => generateSampleCutout('supernova')}>
+                <button className="sample-cutout-btn" onClick={() => { generateSampleCutout('supernova'); setIsFitsFile(false); setUploadedFileName("sn2011fe_sample.png"); }}>
                   💥 Supernova Host
                 </button>
-                <button className="sample-cutout-btn" onClick={() => generateSampleCutout('binary')}>
+                <button className="sample-cutout-btn" onClick={() => { generateSampleCutout('binary'); setIsFitsFile(false); setUploadedFileName("betalyrae_sample.png"); }}>
                   🌀 Binary Merger
                 </button>
               </div>
