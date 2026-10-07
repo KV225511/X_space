@@ -79,6 +79,9 @@ export default function App() {
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [isFitsFile, setIsFitsFile] = useState(false);
   const [customTargetId, setCustomTargetId] = useState("");
+  const [fitsFilePath, setFitsFilePath] = useState("");
+  const [inspectingFits, setInspectingFits] = useState(false);
+  const [fitsInspectionData, setFitsInspectionData] = useState(null);
   const [includeFits, setIncludeFits] = useState(true);
   const [generateDeepSeek, setGenerateDeepSeek] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -176,6 +179,42 @@ export default function App() {
     ctx.fill();
   }, [currentTarget, mode]);
 
+  // Handle inspecting and reading a FITS file from path
+  const handleInspectAndLoadFits = async (pathOverride) => {
+    const targetPath = typeof pathOverride === 'string' ? pathOverride : fitsFilePath;
+    if (!targetPath || !targetPath.trim()) return;
+
+    setInspectingFits(true);
+    try {
+      const res = await fetch('/api/fits/inspect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_path: targetPath.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`FITS Read Error: ${err.detail || "Unable to read FITS file at specified path."}`);
+        setInspectingFits(false);
+        return;
+      }
+      const data = await res.json();
+      setFitsInspectionData(data);
+      setFitsFilePath(targetPath);
+      setUploadedImageBase64(data.preview_data_url);
+      setUploadedFileName(targetPath.split('/').pop().split('\\').pop());
+      setIsFitsFile(true);
+      setIncludeFits(true);
+      if (data.metadata?.target_name && data.metadata.target_name !== "Custom Target") {
+        setCustomTargetId(data.metadata.target_name);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(`Could not connect to backend to read FITS file: ${err.message}`);
+    } finally {
+      setInspectingFits(false);
+    }
+  };
+
   // Handle image or FITS upload file selection
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -185,11 +224,34 @@ export default function App() {
     const fname = file.name.toLowerCase();
     const isFits = fname.endsWith('.fits') || fname.endsWith('.fit') || fname.endsWith('.fts');
     setIsFitsFile(isFits);
-    setIncludeFits(true); // Automatically ensure FITS is enabled when user uploads FITS
+    setIncludeFits(true);
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      setUploadedImageBase64(event.target.result);
+    reader.onload = async (event) => {
+      const b64 = event.target.result;
+      setUploadedImageBase64(b64);
+      if (isFits) {
+        setInspectingFits(true);
+        try {
+          const res = await fetch('/api/fits/inspect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_base64: b64 }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setFitsInspectionData(data);
+            setUploadedImageBase64(data.preview_data_url);
+            if (data.metadata?.target_name && data.metadata.target_name !== "Custom Target") {
+              setCustomTargetId(data.metadata.target_name);
+            }
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setInspectingFits(false);
+        }
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -266,6 +328,7 @@ export default function App() {
     const payload = {
       target_id: targetName,
       image_base64: mode === "upload" && includeFits ? uploadedImageBase64 : null,
+      fits_file_path: mode === "upload" && includeFits && fitsFilePath.trim() ? fitsFilePath.trim() : null,
       include_fits: includeFits,
       generate_deepseek_report: generateDeepSeek,
       force_fresh_report: false,
@@ -497,20 +560,123 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
             </div>
           ) : (
             <div className="tab-content">
-              {/* Optional Custom Target Identifier */}
-              <div className="form-group">
-                <label className="form-label" htmlFor="custom-target-id">Custom Target Name / Catalog ID (Optional)</label>
-                <input
-                  id="custom-target-id"
-                  type="text"
-                  className="custom-text-input"
-                  placeholder="e.g. TIC-25155310, KIC-9002278, or SN-2026xyz"
-                  value={customTargetId}
-                  onChange={(e) => setCustomTargetId(e.target.value)}
-                />
+              {/* Option 1: Direct FITS File Path Input */}
+              <div className="form-group fits-path-group">
+                <label className="form-label" htmlFor="fits-path-input">
+                  Enter Local FITS File Path (.fits)
+                </label>
+                <div className="fits-path-input-row">
+                  <input
+                    id="fits-path-input"
+                    type="text"
+                    className="custom-text-input font-mono"
+                    placeholder="e.g. data/sample_images/kepler_10_transit.fits or C:/path/to/target.fits"
+                    value={fitsFilePath}
+                    onChange={(e) => setFitsFilePath(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleInspectAndLoadFits(); }}
+                  />
+                  <button
+                    type="button"
+                    className="load-fits-btn"
+                    onClick={() => handleInspectAndLoadFits()}
+                    disabled={inspectingFits || !fitsFilePath.trim()}
+                  >
+                    {inspectingFits ? (
+                      <>
+                        <span className="btn-spinner sm"></span>
+                        <span>Reading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🔍</span>
+                        <span>Read FITS</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
-              {/* FITS & Optical Image Dropzone */}
+              {/* Quick Sample FITS Buttons */}
+              <div className="quick-fits-presets">
+                <span className="chip-label">Quick sample FITS files:</span>
+                <button
+                  type="button"
+                  className="quick-fits-chip"
+                  onClick={() => handleInspectAndLoadFits("data/sample_images/kepler_10_transit.fits")}
+                >
+                  🪐 Kepler-10 FITS
+                </button>
+                <button
+                  type="button"
+                  className="quick-fits-chip"
+                  onClick={() => handleInspectAndLoadFits("data/sample_images/sn2011fe_supernova.fits")}
+                >
+                  💥 SN 2011fe FITS
+                </button>
+                <button
+                  type="button"
+                  className="quick-fits-chip"
+                  onClick={() => handleInspectAndLoadFits("data/sample_images/beta_lyrae_binary.fits")}
+                >
+                  🌀 Beta Lyrae FITS
+                </button>
+                <button
+                  type="button"
+                  className="quick-fits-chip"
+                  onClick={() => handleInspectAndLoadFits("data/sample_images/ngc4993_grb_kilonova.fits")}
+                >
+                  ☄️ NGC 4993 FITS
+                </button>
+              </div>
+
+              {/* FITS Inspection Card (Rendered if FITS is loaded) */}
+              {fitsInspectionData && (
+                <div className="fits-inspection-card">
+                  <div className="fits-inspection-header">
+                    <span className="fits-status-badge">✅ Valid FITS Loaded ({fitsInspectionData.metadata.hdu_count} HDU)</span>
+                    <button
+                      type="button"
+                      className="clear-fits-btn"
+                      onClick={() => {
+                        setFitsInspectionData(null);
+                        setUploadedImageBase64(null);
+                        setUploadedFileName("");
+                        setFitsFilePath("");
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="fits-inspection-body">
+                    <div className="fits-thumbnail-box">
+                      <img src={fitsInspectionData.preview_data_url} alt="FITS Visual Heatmap" />
+                      <span className="thumb-caption">ArcSinh Visual Heatmap</span>
+                    </div>
+                    <div className="fits-meta-table">
+                      <div className="meta-item">
+                        <span className="meta-k">Target:</span>
+                        <span className="meta-v">{fitsInspectionData.metadata.target_name}</span>
+                      </div>
+                      <div className="meta-item">
+                        <span className="meta-k">Dimensions:</span>
+                        <span className="meta-v font-mono">{fitsInspectionData.pixel_stats.original_shape.join(' × ')}</span>
+                      </div>
+                      <div className="meta-item">
+                        <span className="meta-k">Telescope:</span>
+                        <span className="meta-v">{fitsInspectionData.metadata.telescope}</span>
+                      </div>
+                      <div className="meta-item">
+                        <span className="meta-k">Pixel Min/Max:</span>
+                        <span className="meta-v font-mono">{fitsInspectionData.pixel_stats.min.toFixed(0)} &bull; {fitsInspectionData.pixel_stats.max.toFixed(0)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Option 2: Drag & Drop File Upload */}
+              <div className="divider-or"><span>OR UPLOAD FILE</span></div>
+
               <div
                 className="upload-dropzone"
                 onClick={() => fileInputRef.current?.click()}
@@ -531,23 +697,14 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                   </div>
                 ) : (
                   <div className="image-preview-wrapper" onClick={(e) => e.stopPropagation()}>
-                    {isFitsFile ? (
-                      <div className="fits-file-preview-card">
-                        <span className="fits-badge-icon">🔭</span>
-                        <div className="fits-badge-text">
-                          <span className="fits-badge-filename">{uploadedFileName || "astronomical_target.fits"}</span>
-                          <span className="fits-badge-meta">Astronomical FITS Array Loaded &bull; Ready for 2D ArcSinh/MAD Ingestion</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <img src={uploadedImageBase64} alt="Astronomical Cutout Preview" />
-                    )}
+                    <img src={uploadedImageBase64} alt="Astronomical Cutout Preview" />
                     <button
                       className="remove-img-btn"
                       onClick={() => {
                         setUploadedImageBase64(null);
                         setUploadedFileName("");
                         setIsFitsFile(false);
+                        setFitsInspectionData(null);
                       }}
                       title="Remove file"
                     >
@@ -557,18 +714,17 @@ ${(r.recommended_followup || []).map(f => `- ${f}`).join('\n')}
                 )}
               </div>
 
-              {/* Preset Sample Buttons */}
-              <div className="sample-cutouts-group">
-                <span className="chip-label">Try sample astronomical cutouts:</span>
-                <button className="sample-cutout-btn" onClick={() => { generateSampleCutout('transit'); setIsFitsFile(false); setUploadedFileName("kepler10_sample.png"); }}>
-                  🪐 Exoplanet PSF
-                </button>
-                <button className="sample-cutout-btn" onClick={() => { generateSampleCutout('supernova'); setIsFitsFile(false); setUploadedFileName("sn2011fe_sample.png"); }}>
-                  💥 Supernova Host
-                </button>
-                <button className="sample-cutout-btn" onClick={() => { generateSampleCutout('binary'); setIsFitsFile(false); setUploadedFileName("betalyrae_sample.png"); }}>
-                  🌀 Binary Merger
-                </button>
+              {/* Optional Custom Target Identifier */}
+              <div className="form-group" style={{ marginTop: '0.85rem' }}>
+                <label className="form-label" htmlFor="custom-target-id">Custom Target Identifier (Optional)</label>
+                <input
+                  id="custom-target-id"
+                  type="text"
+                  className="custom-text-input"
+                  placeholder="e.g. TIC-25155310, KIC-9002278, or SN-2026xyz"
+                  value={customTargetId}
+                  onChange={(e) => setCustomTargetId(e.target.value)}
+                />
               </div>
             </div>
           )}

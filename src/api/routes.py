@@ -15,6 +15,7 @@ from astropy.io import fits
 
 from src.agent.agent import run_astro_agent
 from src.agent.tools import query_ads, query_ned, query_simbad
+from src.data.ingestion import parse_and_inspect_fits
 from src.data.preprocessing import process_fits_image_v4
 from src.models.full_model import AstroFoundationModel
 from src.reporting.llm_reporter import AstronomicalReportGenerator, get_moderation_stats
@@ -241,9 +242,15 @@ class AsyncSubmissionResponse(BaseModel):
     message: str
 
 
+class InspectFitsRequest(BaseModel):
+    file_path: Optional[str] = Field(default=None, description="Local path to FITS file on disk or server")
+    file_base64: Optional[str] = Field(default=None, description="Uploaded FITS file base64 data URL")
+
+
 class WebPredictRequest(BaseModel):
     target_id: Optional[str] = Field(default="Kepler-10", description="Selected predefined target ID")
-    image_base64: Optional[str] = Field(default=None, description="Uploaded image base64 data URL")
+    image_base64: Optional[str] = Field(default=None, description="Uploaded image or FITS base64 data URL")
+    fits_file_path: Optional[str] = Field(default=None, description="Local filesystem path to FITS file (optional)")
     include_fits: bool = Field(default=True, description="Whether 2D FITS image calculation is active (optional)")
     generate_deepseek_report: bool = Field(default=True, description="Generate DeepSeek scientific report")
     force_fresh_report: bool = Field(default=False, description="Bypass cache for DeepSeek query")
@@ -435,43 +442,74 @@ def get_llm_moderation_metrics():
     return get_moderation_stats()
 
 
+@router.post("/api/fits/inspect", tags=["Web Application"])
+def inspect_fits_endpoint(req: InspectFitsRequest):
+    """
+    Inspect an astronomical FITS file (by local filepath or uploaded base64 data).
+    Returns astronomical header metadata, pixel statistics, and a rendered visual preview.
+    """
+    source = req.file_path.strip() if (req.file_path and req.file_path.strip()) else req.file_base64
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide either 'file_path' or 'file_base64' to inspect a FITS file.",
+        )
+    try:
+        res = parse_and_inspect_fits(source)
+        return {
+            "status": "SUCCESS",
+            "metadata": res["metadata"],
+            "pixel_stats": res["pixel_stats"],
+            "preview_data_url": res["preview_data_url"],
+            "file_path": req.file_path,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to read/inspect FITS file: {exc}",
+        )
+
+
 @router.post("/api/predict", tags=["Web Application"])
 def web_predict_and_report(req: WebPredictRequest):
     """
-    Unified web endpoint supporting both predefined target selection and direct image upload.
+    Unified web endpoint supporting both predefined target selection, local FITS file reading, and upload.
     Executes neural model forward pass, agent catalog cross-matching, and moderated DeepSeek report.
     """
     t0 = time.time()
     target_id = req.target_id or "Custom_Object"
     fits_tensor = None
     is_uploaded_image = False
+    fits_meta = None
 
-    # 1. Handle uploaded image or FITS cutout if present and FITS processing enabled
-    if req.include_fits and req.image_base64:
+    # 1. Handle FITS input (either via local filepath or uploaded base64)
+    if req.include_fits and (req.fits_file_path or req.image_base64):
         try:
-            b64_data = req.image_base64
-            if "," in b64_data:
-                b64_data = b64_data.split(",", 1)[1]
-            img_bytes = base64.b64decode(b64_data)
-
-            # Attempt FITS decoding first, then fallback to standard image
+            source = req.fits_file_path.strip() if (req.fits_file_path and req.fits_file_path.strip()) else req.image_base64
+            # Attempt FITS parsing first
             try:
-                with fits.open(io.BytesIO(img_bytes)) as hdul:
-                    raw_data = hdul[0].data if hdul[0].data is not None else hdul[1].data
-                    raw_data = np.array(raw_data, dtype=np.float32)
-                    arr = process_fits_image_v4(raw_data, target_shape=(224, 224))
+                parsed = parse_and_inspect_fits(source)
+                arr = parsed["tensor"]
+                fits_tensor = torch.tensor(arr, dtype=torch.float32).unsqueeze(0)
+                is_uploaded_image = True
+                fits_meta = parsed["metadata"]
+                if target_id in ("Custom_Object", "Uploaded_Target", "Uploaded_Optical_Target", "Custom_FITS_Target"):
+                    target_id = parsed["metadata"].get("target_name") or target_id
             except Exception:
+                # Fallback to standard optical image (PNG, JPEG) via PIL
+                b64_data = req.image_base64 or ""
+                if "," in b64_data:
+                    b64_data = b64_data.split(",", 1)[1]
+                img_bytes = base64.b64decode(b64_data)
                 pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB").resize((224, 224))
                 arr = np.array(pil_img, dtype=np.float32) / 255.0
                 arr = np.transpose(arr, (2, 0, 1))  # (3, 224, 224)
-
-            fits_tensor = torch.tensor(arr, dtype=torch.float32).unsqueeze(0)
-            is_uploaded_image = True
-            target_id = "Uploaded_Optical_Target"
+                fits_tensor = torch.tensor(arr, dtype=torch.float32).unsqueeze(0)
+                is_uploaded_image = True
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to decode uploaded image/FITS file: {exc}",
+                detail=f"Failed to decode/read FITS or image input: {exc}",
             )
 
     # 2. Neural Forward Pass with optional FITS calculation
@@ -556,6 +594,7 @@ def web_predict_and_report(req: WebPredictRequest):
         "target_id": target_id,
         "is_uploaded_image": is_uploaded_image,
         "fits_calculation_mode": "ACTIVE" if fits_active else "OPTIONAL_BYPASSED",
+        "fits_metadata": fits_meta,
         "classification": final_class,
         "confidence": final_conf,
         "energy_score": inf["energy_score"],
