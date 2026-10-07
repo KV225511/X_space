@@ -85,7 +85,7 @@ Existing automated classifiers process only **a single modality in isolation**, 
                                               │
                                               ▼
                                    LLM REPORT GENERATOR
-                             (Gemini 1.5 / OpenAI GPT-4o)
+                             (DeepSeek-V3 / DeepSeek-R1 / GPT-4o)
                                               │
                                               ▼
                                        FastAPI SERVICE

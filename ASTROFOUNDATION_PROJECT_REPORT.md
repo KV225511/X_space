@@ -220,7 +220,7 @@ NASA Telescope Data (Kepler / TESS)
 | Ablation runner | `scripts/run_ablations.py` | ✅ | 11-configuration matrix runner, outputs `outputs/ablation_results.csv` |
 | Fusion trainer | `scripts/train_fusion.py` | ✅ | Dual learning rates, tri-modal training, checkpoint saving |
 | FastAPI server | `src/api/` | ✅ | `main.py`, `routes.py`, `background_tasks.py` |
-| LLM reporter | `src/reporting/llm_reporter.py` | ✅ | `AstronomicalReportGenerator`, Gemini/OpenAI + domain fallback |
+| LLM reporter | `src/reporting/llm_reporter.py` | ✅ | `AstronomicalReportGenerator`, DeepSeek/Gemini/OpenAI + domain fallback |
 
 ---
 
@@ -941,7 +941,7 @@ VS/CV confusion expected (both show repeated outbursts)
 | 🟠 P1 | `src/training/schedulers.py` | Yash | ✅ COMPLETE | Cosine warmup scheduler |
 | 🟠 P1 | AUROC + ECE metrics in `metrics.py` | Rishi | ✅ COMPLETE | AUROC (OvR, OvO) and ECE calibration |
 | 🟡 P2 | `src/agent/agent.py` + `tools.py` | Krissh + Yash + Rishi | ✅ COMPLETE | LangGraph ReAct agent + SIMBAD/NED/ADS tools |
-| 🟡 P2 | `src/reporting/` + `src/api/` | Rishi | ✅ COMPLETE | LLM reports (Gemini/OpenAI) + FastAPI endpoints |
+| 🟡 P2 | `src/reporting/` + `src/api/` | Rishi | ✅ COMPLETE | LLM reports (DeepSeek/Gemini/OpenAI) + FastAPI endpoints |
 | 🟡 P2 | `config/agent_config.yaml` | Krissh | ✅ COMPLETE | Catalog, thresholds, and LLM configuration |
 | 🟡 P2 | `src/training/uncertainty.py` | Yash | ✅ COMPLETE | MC Dropout Bayesian uncertainty decomposition |
 | 🟡 P2 | `src/training/calibration.py` | Yash | ✅ COMPLETE | Post-hoc temperature scaling via L-BFGS |
@@ -960,7 +960,7 @@ VS/CV confusion expected (both show repeated outbursts)
 | Training infra | **95%** | train_encoders.py, train_fusion.py, FocalLoss, OODEnergyLoss, checkpointing |
 | Evaluation & Explainability | **90%** | Macro F1, AUROC, ECE, Brier, GradCAM1D, SaliencyExplainer |
 | Agent (LangGraph) | **100%** | ReAct StateGraph, SIMBAD, NED, NASA ADS tool integration |
-| LLM Reporting | **100%** | Pydantic schema, Jinja2 astrophysical prompts, Gemini / OpenAI / domain fallback |
+| LLM Reporting | **100%** | Pydantic schema, Jinja2 astrophysical prompts, DeepSeek / Gemini / OpenAI / domain fallback |
 | FastAPI Backend | **100%** | /health, /status, /classify, /cross-match, /analyze (sync & async) |
 | Test Suite | **100%** | **44 / 44 tests passing** across 7 test modules |
 | **Overall** | **~96%** | System fully operational end-to-end; ready for final report & demo |

@@ -26,7 +26,8 @@ catalogs:
     row_limit: 5
 
 llm:
-  provider: "gemini" # Options: gemini, openai, heuristic_fallback
+  provider: "deepseek" # Options: deepseek, gemini, openai, heuristic_fallback
+  deepseek_model: "deepseek-chat" # or deepseek-reasoner
   gemini_model: "gemini-1.5-flash"
   openai_model: "gpt-4o"
   temperature: 0.2

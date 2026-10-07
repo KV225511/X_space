@@ -1,4 +1,4 @@
-"""LLM Astronomical Report Generator supporting Gemini, OpenAI, and heuristic offline synthesis."""
+"""LLM Astronomical Report Generator supporting DeepSeek, Gemini, OpenAI, and heuristic offline synthesis."""
 
 import json
 import logging
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class AstronomicalReportGenerator:
     """
     Synthesizes multi-modal foundation model outputs and cross-matched catalog literature
-    into peer-reviewed publication-style scientific reports.
+    into peer-reviewed publication-style scientific reports using DeepSeek, Gemini, or OpenAI.
     """
 
     def __init__(
@@ -23,7 +23,7 @@ class AstronomicalReportGenerator:
         model_name: Optional[str] = None,
         temperature: float = 0.2,
     ):
-        self.provider = provider or os.environ.get("LLM_PROVIDER", "gemini").lower()
+        self.provider = provider or os.environ.get("LLM_PROVIDER", "deepseek").lower()
         self.model_name = model_name
         self.temperature = temperature
 
@@ -41,7 +41,7 @@ class AstronomicalReportGenerator:
         astronomical_notes: str = "",
     ) -> AstronomicalReport:
         """
-        Generate an AstronomicalReport instance. Attempts live LLM API call first,
+        Generate an AstronomicalReport instance. Attempts live LLM API call first (DeepSeek/Gemini/OpenAI),
         falling back gracefully to rigorous deterministic astrophysical synthesis.
         """
         modalities = modalities or ["light_curve", "fits_image", "spectrum"]
@@ -77,7 +77,33 @@ class AstronomicalReportGenerator:
             astronomical_notes=astronomical_notes,
         )
 
-        # 1. Try Google Gemini API if key is available
+        # 1. Try DeepSeek API if key is available
+        deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
+        if deepseek_key and self.provider in ("deepseek", "deepseek-chat", "deepseek-reasoner", "deepseek-ai"):
+            try:
+                from openai import OpenAI
+
+                base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+                client = OpenAI(api_key=deepseek_key, base_url=base_url)
+                response = client.chat.completions.create(
+                    model=self.model_name or "deepseek-chat",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"{SYSTEM_PROMPT}\nOutput MUST be valid JSON adhering strictly to the AstronomicalReport schema.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=self.temperature,
+                )
+                content = response.choices[0].message.content
+                data = json.loads(content)
+                return AstronomicalReport(**data)
+            except Exception as e:
+                logger.warning("DeepSeek report generation failed (%s). Falling back to domain synthesis.", e)
+
+        # 2. Try Google Gemini API if key is available
         gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if gemini_key and self.provider in ("gemini", "google"):
             try:
@@ -97,7 +123,7 @@ class AstronomicalReportGenerator:
             except Exception as e:
                 logger.warning("Gemini report generation failed (%s). Falling back to domain synthesis.", e)
 
-        # 2. Try OpenAI API if key is available
+        # 3. Try OpenAI API if key is available
         openai_key = os.environ.get("OPENAI_API_KEY")
         if openai_key and self.provider == "openai":
             try:
@@ -119,7 +145,7 @@ class AstronomicalReportGenerator:
             except Exception as e:
                 logger.warning("OpenAI report generation failed (%s). Falling back to domain synthesis.", e)
 
-        # 3. High-Fidelity Domain Synthesis Engine (Deterministic Offline Mode)
+        # 4. High-Fidelity Domain Synthesis Engine (Deterministic Offline Mode)
         return self._generate_domain_synthesis(
             target_id=target_id,
             classification=classification,
