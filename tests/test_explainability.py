@@ -3,7 +3,7 @@ Unit tests for AstroFoundation Explainability & Metrics:
 - 1D Grad-CAM (GradCAM1D)
 - 2D FITS Grad-CAM (GradCAM2D)
 - SmoothGrad Input Saliency (SaliencyExplainer)
-- SHAP / Integrated Gradients (ShapleyExplainer)
+- SHAP (ShapleyExplainer)
 - MultiModal Gating Explainer
 - AUROC Metric
 """
@@ -115,16 +115,6 @@ def test_saliency_explainer_on_light_curve():
     assert not np.isnan(saliency).any()
 
 
-def test_shapley_explainer_integrated_gradients():
-    torch.manual_seed(42)
-    linear_model = nn.Linear(64, 6)
-    explainer = ShapleyExplainer(linear_model)
-
-    x = torch.randn(1, 64)
-    attrs = explainer.attribute_integrated_gradients(x, target_class=0, n_steps=5)
-
-    assert attrs.shape == (64,)
-    assert not np.isnan(attrs).any()
 
 
 def test_multimodal_gating_explainer():

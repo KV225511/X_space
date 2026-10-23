@@ -7,7 +7,7 @@ stellar spectra, 2D FITS images, and multi-modal fusion:
 1. GradCAM1D: 1D Gradient-weighted Class Activation Mapping for Conv1D backbones.
 2. GradCAM2D: 2D Spatial Grad-CAM for FITS vision backbones (PSF, host galaxy, transients).
 3. SaliencyExplainer: Input gradient and SmoothGrad saliency maps for 1D sequences.
-4. ShapleyExplainer: Captum Integrated Gradients (Axiomatic Attribution) & SHAP KernelExplainer.
+4. ShapleyExplainer: SHAP KernelExplainer.
 5. MultiModalGatingExplainer: Quantifies modality contribution weights from cross-attention gating.
 6. LineIdentifier: Matches salient spectral regions with canonical atomic emission/absorption lines.
 """
@@ -308,40 +308,11 @@ class SaliencyExplainer:
 
 class ShapleyExplainer:
     """
-    SHAP & Integrated Gradients Explainer for AstroFoundation.
-    Uses Captum IntegratedGradients for axiomatic path attribution and
-    SHAP KernelExplainer for feature importance credit assignment.
+    SHAP Explainer for AstroFoundation.
+    Uses SHAP KernelExplainer for feature importance credit assignment.
     """
     def __init__(self, model: nn.Module):
         self.model = model
-
-    def attribute_integrated_gradients(
-        self,
-        x: torch.Tensor,
-        target_class: Optional[int] = None,
-        n_steps: int = 25,
-    ) -> np.ndarray:
-        """
-        Computes path-integrated gradients (Axiomatic Attribution / Aumann-Shapley values):
-        IG_i(x) = (x_i - x_i') * \\int_0^1 \\frac{\\partial F(x' + \\alpha(x - x'))}{\\partial x_i} d\\alpha
-        """
-        self.model.eval()
-        if x.dim() == 1:
-            x = x.unsqueeze(0)
-
-        baseline = torch.zeros_like(x)
-        if target_class is None:
-            with torch.no_grad():
-                out = self.model(x)
-                if hasattr(out, 'logits'):
-                    out = out.logits
-                target_class = int(torch.argmax(out, dim=-1).item())
-
-        from captum.attr import IntegratedGradients
-        ig = IntegratedGradients(self.model)
-        attributions = ig.attribute(x, baselines=baseline, target=target_class, n_steps=n_steps)
-        attr_np = attributions.squeeze().detach().cpu().numpy()
-        return attr_np
 
     def attribute_kernel_shap(
         self,
@@ -357,7 +328,8 @@ class ShapleyExplainer:
 
         def model_predict(data: np.ndarray):
             with torch.no_grad():
-                tensor = torch.tensor(data, dtype=torch.float32)
+                device = next(self.model.parameters()).device
+                tensor = torch.tensor(data, dtype=torch.float32, device=device)
                 preds = self.model(tensor)
                 if hasattr(preds, 'probabilities'):
                     preds = preds.probabilities
@@ -371,6 +343,8 @@ class ShapleyExplainer:
         shap_values = explainer.shap_values(x, nsamples=nsamples)
         if isinstance(shap_values, list):
             return shap_values[target_class]
+        if hasattr(shap_values, "ndim") and shap_values.ndim == 3:
+            return shap_values[:, :, target_class]
         return shap_values
 
 
