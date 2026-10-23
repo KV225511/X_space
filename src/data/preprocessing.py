@@ -1,4 +1,5 @@
 import numpy as np
+from PIL import Image
 
 # =====================================================================
 # 1. LIGHT CURVE PREPROCESSING (N = 8192 + DYNAMIC GAP MASKING)
@@ -72,14 +73,16 @@ def process_fits_image_v4(image_data, target_shape=(224, 224), epsilon=1e-8):
     stretched = np.arcsinh(normalized)
     stretched = np.nan_to_num(stretched, nan=0.0)
 
-    # Step 4: Simple Resize to Target Shape (224x224) via Crop/Pad or Interpolation
+    # Step 4: Robust Bilinear Resize to Target Shape (224, 224) preserving PSF centering
     h, w = stretched.shape
     if (h, w) != target_shape:
-        # Simple nearest-neighbor cropping/padding for demonstration
-        resampled = np.zeros(target_shape, dtype=np.float32)
-        min_h, min_w = min(h, target_shape[0]), min(w, target_shape[1])
-        resampled[:min_h, :min_w] = stretched[:min_h, :min_w]
-        stretched = resampled
+        min_v = float(stretched.min())
+        max_v = float(stretched.max())
+        range_v = max_v - min_v if (max_v - min_v) > 1e-8 else 1.0
+        norm01 = np.clip((stretched - min_v) / range_v, 0.0, 1.0)
+        pil_img = Image.fromarray((norm01 * 65535.0).astype(np.uint16))
+        pil_resized = pil_img.resize((target_shape[1], target_shape[0]), Image.Resampling.BILINEAR)
+        stretched = (np.array(pil_resized, dtype=np.float32) / 65535.0) * range_v + min_v
 
     # Step 5: Convert 2D image into 3-channel (3, H, W) for vision backbones
     stacked_3channel = np.stack([stretched] * 3, axis=0)
@@ -157,3 +160,109 @@ def augment_spectrum(spectrum: np.ndarray, p: float = 0.5, rng: np.random.Random
         aug[start_idx : start_idx + cutout_width] = 1.0
 
     return np.clip(aug, 0.01, 10.0).astype(np.float32)
+
+
+# =====================================================================
+# 5. LIGHT CURVE DATA AUGMENTATION (PHYSICS-INFORMED)
+# =====================================================================
+def augment_light_curve(
+    flux: np.ndarray, 
+    mask: np.ndarray, 
+    p: float = 0.5, 
+    rng: np.random.RandomState = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Physics-informed 1D photometric light curve data augmentation:
+    1. Random circular phase shift: rolls flux along timeline (arbitrary observation epoch).
+    2. Gaussian photometric noise injection: simulates Poisson photon noise / faint targets.
+    3. Stellar spot / baseline drift: adds subtle low-frequency sinusoidal variation.
+    4. Telemetry dropout simulation: drops contiguous blocks and sets mask to False.
+    5. Cosmic ray hit simulation: injects 1-3 sharp positive outlier spikes.
+    """
+    if rng is None:
+        rng = np.random.RandomState()
+
+    aug_flux = flux.copy()
+    aug_mask = mask.copy()
+    n_pts = len(aug_flux)
+
+    # 1. Circular phase shift
+    if rng.rand() < p:
+        shift = rng.randint(0, n_pts)
+        aug_flux = np.roll(aug_flux, shift)
+        aug_mask = np.roll(aug_mask, shift)
+
+    # 2. Gaussian photometric shot noise
+    if rng.rand() < p:
+        sigma = rng.uniform(0.005, 0.025)
+        noise = rng.normal(0.0, sigma, size=n_pts)
+        aug_flux = aug_flux + noise
+
+    # 3. Stellar spot low-frequency baseline modulation
+    if rng.rand() < p:
+        period = rng.uniform(n_pts * 0.5, n_pts * 2.0)
+        amplitude = rng.uniform(0.005, 0.025)
+        t = np.arange(n_pts)
+        trend = amplitude * np.sin(2.0 * np.pi * t / period)
+        aug_flux = aug_flux + trend
+
+    # 4. Telemetry dropouts (contiguous gap simulation)
+    if rng.rand() < p:
+        gap_len = rng.randint(30, 150)
+        start = rng.randint(0, n_pts - gap_len)
+        aug_flux[start : start + gap_len] = 0.0
+        aug_mask[start : start + gap_len] = False
+
+    # 5. Cosmic ray positive spikes (1-3 events)
+    if rng.rand() < p:
+        num_spikes = rng.randint(1, 4)
+        spike_indices = rng.randint(0, n_pts, size=num_spikes)
+        spike_amps = rng.uniform(0.05, 0.20, size=num_spikes)
+        aug_flux[spike_indices] += spike_amps
+
+    return aug_flux.astype(np.float32), aug_mask.astype(bool)
+
+
+# =====================================================================
+# 6. FITS IMAGE DATA AUGMENTATION (ASTRONOMICAL SYMMETRY & SENSORS)
+# =====================================================================
+def augment_fits_image(
+    image_3ch: np.ndarray, 
+    p: float = 0.5, 
+    rng: np.random.RandomState = None
+) -> np.ndarray:
+    """
+    Astronomical 2D FITS image data augmentation:
+    1. D4 Group Symmetries: 90/180/270 deg rotation & horizontal/vertical flips.
+    2. Sub-pixel translation jitter: ±2-4 pixel spatial pointing drift.
+    3. Background sky & CCD readout noise injection.
+    """
+    if rng is None:
+        rng = np.random.RandomState()
+
+    aug = image_3ch.copy()  # shape (3, H, W)
+
+    # 1. Random D4 rotational symmetries
+    if rng.rand() < p:
+        k = rng.randint(0, 4)
+        aug = np.rot90(aug, k=k, axes=(1, 2))
+
+    # 2. Random horizontal and vertical flips
+    if rng.rand() < p:
+        aug = np.flip(aug, axis=1)  # vertical flip
+    if rng.rand() < p:
+        aug = np.flip(aug, axis=2)  # horizontal flip
+
+    # 3. Spatial translation jitter (pointing drift)
+    if rng.rand() < p:
+        dy = rng.randint(-3, 4)
+        dx = rng.randint(-3, 4)
+        aug = np.roll(aug, shift=(dy, dx), axis=(1, 2))
+
+    # 4. CCD sky readout noise
+    if rng.rand() < p:
+        noise_sigma = rng.uniform(0.005, 0.02)
+        noise = rng.normal(0.0, noise_sigma, size=aug.shape)
+        aug = aug + noise
+
+    return aug.astype(np.float32)
