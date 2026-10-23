@@ -7,11 +7,14 @@ t-SNE manifold projections, and similarity indexing.
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 import numpy as np
 import torch
 from tqdm import tqdm
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.models.full_model import AstroFoundationModel
 
