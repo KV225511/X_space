@@ -1,46 +1,53 @@
 /* ==============================================================================
-   AstroFoundation — Cosmic Design System (Vanilla CSS Tokens & Global Styles)
+   AstroFoundation — Observatory Minimalist Design System
+   Obsidian Dark Palette • Pure Precision Astrometry • Clean Typography
    ============================================================================== */
 
 :root {
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-heading: 'Outfit', var(--font-sans);
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  /* Deep Cosmic Palette */
-  --bg-space: #070913;
-  --bg-card: rgba(15, 20, 38, 0.72);
-  --bg-card-hover: rgba(22, 30, 56, 0.85);
-  --bg-elevated: rgba(26, 35, 68, 0.6);
-  --bg-input: rgba(10, 14, 28, 0.85);
+  /* Obsidian Observatory Palette (Deep Pure Dark Mode) */
+  --bg-space: #08090d;
+  --bg-nav: rgba(10, 12, 18, 0.88);
+  --bg-card: #0d0f17;
+  --bg-card-subtle: #111420;
+  --bg-card-hover: #151928;
+  --bg-input: #10131d;
+  --bg-elevated: #161b2b;
 
-  /* Borders & Glass */
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-highlight: rgba(99, 102, 241, 0.35);
-  --border-glow: rgba(139, 92, 246, 0.45);
+  /* Crisp Structural Borders */
+  --border-subtle: rgba(255, 255, 255, 0.065);
+  --border-medium: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(56, 189, 248, 0.4);
+  --border-active: #38bdf8;
 
-  /* Primary Cosmic Accents */
-  --primary-indigo: #6366f1;
-  --primary-violet: #8b5cf6;
-  --primary-cyan: #06b6d4;
-  --primary-emerald: #10b981;
-  --primary-amber: #f59e0b;
-  --primary-rose: #f43f5e;
+  /* Restrained Astrophysical Accents */
+  --accent-cyan: #38bdf8;      /* Starlight Cyan (Photometry / Primary Highlight) */
+  --accent-blue: #3b82f6;      /* Celestial Deep Blue */
+  --accent-indigo: #6366f1;    /* Spectral Continuum */
+  --accent-emerald: #10b981;   /* Confirmed / In-Distribution */
+  --accent-amber: #f59e0b;     /* Anomaly / OOD Warning */
+  --accent-rose: #f43f5e;      /* Critical / Flare */
 
   /* Text Hierarchy */
-  --text-main: #f8fafc;
+  --text-main: #f3f4f6;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
-  --text-accent: #a5b4fc;
+  --text-accent: #38bdf8;
 
-  /* Shadows & Glows */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(99, 102, 241, 0.12);
-  --shadow-glow: 0 0 35px -5px rgba(99, 102, 241, 0.25);
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  /* Precision Radii (Tight & Minimalist, No Toy-Like Blobs) */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-full: 9999px;
+
+  /* Subtle Depth (Zero Garish Glow) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -53,63 +60,32 @@ html, body {
   background-color: var(--bg-space);
   color: var(--text-main);
   font-family: var(--font-sans);
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
   line-height: 1.5;
-  overflow-x: hidden;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Background Cosmic Nebula Glows */
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Subtle, sophisticated background vignette (replaces tacky blurred orbs) */
 .cosmos-background {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  overflow: hidden;
+  background: 
+    radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.035) 0%, transparent 50%),
+    radial-gradient(circle at 85% 100%, rgba(99, 102, 241, 0.025) 0%, transparent 40%);
 }
 
-.glow-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(140px);
-  opacity: 0.28;
-  animation: floatOrb 22s ease-in-out infinite alternate;
-}
-
-.orb-1 {
-  width: 650px;
-  height: 650px;
-  background: radial-gradient(circle, #6366f1 0%, transparent 70%);
-  top: -150px;
-  left: -150px;
-}
-
-.orb-2 {
-  width: 750px;
-  height: 750px;
-  background: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
-  bottom: -200px;
-  right: -150px;
-  animation-duration: 28s;
-}
-
-.orb-3 {
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, #06b6d4 0%, transparent 70%);
-  top: 40%;
-  left: 45%;
-  opacity: 0.15;
-  animation-duration: 35s;
-}
-
-@keyframes floatOrb {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(60px, 40px) scale(1.08); }
-  100% { transform: translate(-40px, -30px) scale(0.95); }
-}
-
-/* Typography utilities */
 .font-mono {
   font-family: var(--font-mono);
 }
@@ -118,21 +94,21 @@ html, body {
   font-family: var(--font-heading);
 }
 
-/* Scrollbar */
+/* Precision Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(10, 14, 28, 0.6);
+  background: var(--bg-space);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.3);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.5);
+  background: rgba(255, 255, 255, 0.22);
 }
