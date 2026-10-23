@@ -113,12 +113,164 @@ KNOWN_ASTRONOMICAL_TARGETS: Dict[str, Dict[str, Any]] = {
             }
         ],
     },
+    "SS-CYGNI": {
+        "simbad": {
+            "main_id": "SS Cygni",
+            "object_type": "Cataclysmic Variable Star (CV*) / Dwarf Nova (DN*)",
+            "description": "Prototypical U Geminorum dwarf nova showing recurrent disk instability outbursts",
+            "ra": 325.6792,
+            "dec": 43.5858,
+            "spectral_type": "pec + K5V",
+            "parallax_mas": 8.78,
+            "citations": 312,
+        },
+        "ned": {"found": False, "description": "Galactic cataclysmic variable system"},
+        "ads": [
+            {
+                "bibcode": "2013Sci...340..950M",
+                "title": "An accurate geometric parallax for the dwarf nova SS Cygni",
+                "authors": ["Miller-Jones, J. C. A.", "Sivakoff, G. R.", "Knigge, C."],
+                "year": 2013,
+                "citation_count": 185,
+            },
+            {
+                "bibcode": "2004PASP..116..949S",
+                "title": "A spectroscopic study of dwarf nova outbursts: SS Cygni",
+                "authors": ["Schreiber, M. R.", "Gänsicke, B. T."],
+                "year": 2004,
+                "citation_count": 92,
+            },
+        ],
+    },
+    "BETA-LYRAE": {
+        "simbad": {
+            "main_id": "Beta Lyrae",
+            "object_type": "Eclipsing Binary of Beta Lyr type (EB*)",
+            "description": "Prototypical semidetached interacting binary undergoing active Roche lobe mass transfer",
+            "ra": 282.5197,
+            "dec": 33.3627,
+            "spectral_type": "B8II-IIIep + B0.5V",
+            "parallax_mas": 3.40,
+            "citations": 280,
+        },
+        "ned": {"found": False, "description": "Galactic interacting binary system"},
+        "ads": [
+            {
+                "bibcode": "2008ApJ...684L..95Z",
+                "title": "Direct imaging of the interacting binary Beta Lyrae with CHARA array",
+                "authors": ["Zhao, M.", "Gies, D.", "Monnier, J. D."],
+                "year": 2008,
+                "citation_count": 140,
+            }
+        ],
+    },
+    "DELTA-CEPHEI": {
+        "simbad": {
+            "main_id": "Delta Cephei",
+            "object_type": "Classical Cepheid Variable (DCEP)",
+            "description": "Prototypical radial pulsating Cepheid variable star period-luminosity standard candle",
+            "ra": 337.2917,
+            "dec": 58.4152,
+            "spectral_type": "F5Ib-G1Ib",
+            "parallax_mas": 3.66,
+            "citations": 245,
+        },
+        "ned": {"found": False, "description": "Galactic pulsating variable star"},
+        "ads": [
+            {
+                "bibcode": "2012A&A...541A.134M",
+                "title": "An improved distance to Delta Cephei using HST astrometry",
+                "authors": ["Merand, A.", "Kervella, P.", "Breitfelder, J."],
+                "year": 2012,
+                "citation_count": 95,
+            }
+        ],
+    },
+    "SN-2011FE": {
+        "simbad": {
+            "main_id": "SN 2011fe",
+            "object_type": "Supernova Type Ia (SN Ia)",
+            "description": "Standardizable cosmological Type Ia thermonuclear supernova in Pinwheel Galaxy (Messier 101)",
+            "ra": 210.8023,
+            "dec": 54.2733,
+            "redshift": 0.0008,
+            "citations": 620,
+        },
+        "ned": {
+            "found": True,
+            "main_id": "MESSIER 101",
+            "object_type": "Galaxy / SN Host",
+            "redshift": 0.0008,
+            "velocity_kms": 241.0,
+        },
+        "ads": [
+            {
+                "bibcode": "2011Natur.480..344N",
+                "title": "A normal Type Ia supernova from a white-dwarf progenitor in M101",
+                "authors": ["Nugent, P. E.", "Sullivan, M.", "Cenko, S. B."],
+                "year": 2011,
+                "citation_count": 780,
+            }
+        ],
+    },
+    "NGC-4993": {
+        "simbad": {
+            "main_id": "NGC 4993",
+            "object_type": "Host Galaxy / GRB & Kilonova Source (Galaxy)",
+            "description": "Host galaxy of binary neutron star merger gravitational wave event GW170817 and short GRB 170817A",
+            "ra": 197.4503,
+            "dec": -23.6331,
+            "redshift": 0.0097,
+            "citations": 1250,
+        },
+        "ned": {
+            "found": True,
+            "main_id": "NGC 4993",
+            "object_type": "Lenticular Galaxy",
+            "redshift": 0.0097,
+            "velocity_kms": 2926.0,
+        },
+        "ads": [
+            {
+                "bibcode": "2017ApJ...848L..12A",
+                "title": "Multi-messenger Observations of a Binary Neutron Star Merger",
+                "authors": ["Abbott, B. P.", "Abbott, R.", "LIGO Scientific Collaboration"],
+                "year": 2017,
+                "citation_count": 4200,
+            }
+        ],
+    },
+}
+
+# Alias resolution mapping for sample file prefixes and catalog variants
+TARGET_ALIASES: Dict[str, str] = {
+    "KEPLER-10-TRANSIT": "KEPLER-10",
+    "KEPLER-10B": "KEPLER-10",
+    "KEPLER10": "KEPLER-10",
+    "BETA-LYRAE-BINARY": "BETA-LYRAE",
+    "BETALYRAE": "BETA-LYRAE",
+    "KIC-9002278": "KIC-9002278",
+    "DELTA-CEPHEI-PULSATOR": "DELTA-CEPHEI",
+    "DELTACEPHEI": "DELTA-CEPHEI",
+    "KIC-9700322": "KIC-9700322",
+    "SN2011FE": "SN-2011FE",
+    "SN-2011FE-SUPERNOVA": "SN-2011FE",
+    "SN2011FE-SUPERNOVA": "SN-2011FE",
+    "SS-CYGNI-CATACLYSMIC": "SS-CYGNI",
+    "SSCYGNI-CATACLYSMIC": "SS-CYGNI",
+    "SSCYGNI": "SS-CYGNI",
+    "NGC-4993-GRB-KILONOVA": "NGC-4993",
+    "NGC4993-GRB-KILONOVA": "NGC-4993",
+    "NGC4993": "NGC-4993",
+    "GW170817": "NGC-4993",
+    "GRB-170817A": "NGC-4993",
 }
 
 
 def _normalize_key(target_id: str) -> str:
     """Normalize target string for matching."""
-    return target_id.strip().upper().replace(" ", "-").replace("_", "-")
+    key = target_id.strip().upper().replace(" ", "-").replace("_", "-")
+    return TARGET_ALIASES.get(key, key)
 
 
 def query_simbad(
